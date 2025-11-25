@@ -52,7 +52,7 @@ namespace LmpCommon.Message.Data.ShareProgress
             {
                 // Decompression failed - data is corrupted
                 NumBytes = 0;
-                Data = new byte[0];
+                Data = Array.Empty<byte>();
             }
         }
 

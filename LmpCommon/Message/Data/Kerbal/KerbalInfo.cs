@@ -1,5 +1,6 @@
 ﻿using Lidgren.Network;
 using LmpCommon.Message.Base;
+using System;
 
 namespace LmpCommon.Message.Data.Kerbal
 {
@@ -33,7 +34,7 @@ namespace LmpCommon.Message.Data.Kerbal
             {
                 // Decompression failed - data is corrupted
                 NumBytes = 0;
-                KerbalData = new byte[0];
+                KerbalData = Array.Empty<byte>();
             }
         }
 

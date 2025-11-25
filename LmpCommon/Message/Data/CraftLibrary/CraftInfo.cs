@@ -1,6 +1,7 @@
 ﻿using Lidgren.Network;
 using LmpCommon.Enums;
 using LmpCommon.Message.Base;
+using System;
 
 namespace LmpCommon.Message.Data.CraftLibrary
 {
@@ -42,7 +43,7 @@ namespace LmpCommon.Message.Data.CraftLibrary
             {
                 // Decompression failed - data is corrupted
                 NumBytes = 0;
-                Data = new byte[0];
+                Data = Array.Empty<byte>();
             }
         }
 

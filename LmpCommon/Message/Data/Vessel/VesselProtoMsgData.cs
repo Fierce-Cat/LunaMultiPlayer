@@ -1,5 +1,6 @@
 ﻿using Lidgren.Network;
 using LmpCommon.Message.Types;
+using System;
 
 namespace LmpCommon.Message.Data.Vessel
 {
@@ -42,7 +43,7 @@ namespace LmpCommon.Message.Data.Vessel
             {
                 // Decompression failed - data is corrupted
                 NumBytes = 0;
-                Data = new byte[0];
+                Data = Array.Empty<byte>();
             }
         }
 
