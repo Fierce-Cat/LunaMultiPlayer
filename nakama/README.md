@@ -2,6 +2,23 @@
 
 This folder contains the Nakama server configuration and Lua match handlers for LunaMultiplayer.
 
+## Implementation Status
+
+**Phase 3 (Server-Side Logic): ✅ COMPLETE**
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| Match Lifecycle | ✅ | init, join, loop, leave, terminate |
+| Warp Control | ✅ | subspace, MCU, admin modes |
+| Lock System | ✅ | acquire, release, ownership |
+| Vessel Sync | ✅ | proto, update, remove |
+| Kerbal Sync | ✅ | attributes, status |
+| Anti-Cheat | ✅ | rate limiting, movement validation |
+| Admin Commands | ✅ | kick, ban, settings, announce |
+| Scenario System | ✅ | science, funds, tech, contracts |
+| Persistence | ✅ | Nakama storage |
+| Chat | ✅ | rate limiting, XSS sanitization |
+
 ## Features
 
 - **Full Game State Management**: Vessels, Kerbals, locks, warp control
@@ -53,8 +70,24 @@ nakama/
 ├── README.md               # This file
 └── data/
     └── modules/
-        └── lmp_match.lua   # Main LMP match handler (~1000 lines)
+        └── lmp_match.lua   # Main LMP match handler (~1300 lines)
 ```
+
+## Feature Parity with Original LMP Server
+
+| Original System | Nakama Implementation | Status |
+|----------------|----------------------|--------|
+| `WarpSystem.cs` | `handle_warp()` with subspace tracking | ✅ |
+| `LockSystem.cs` | `handle_lock()` with ownership | ✅ |
+| `KerbalSystem.cs` | `handle_kerbal()` with attributes | ✅ |
+| `VesselDataUpdater.cs` | `handle_vessel_update()` with anti-cheat | ✅ |
+| `TimeSystem.cs` | `update_universe_time()` | ✅ |
+| `ScenarioSystem.cs` | `handle_scenario()` | ✅ |
+| `HandshakeSystem.cs` | `match_join_attempt()` | ✅ |
+| `GroupSystem.cs` | Pending (Phase 4 - Nakama Groups) | ⏳ |
+| `CraftLibrarySystem.cs` | Can use Nakama Storage API | ⏳ |
+| `ScreenshotSystem.cs` | Can use Nakama Storage API | ⏳ |
+| `FlagSystem.cs` | Can use Nakama Storage API | ⏳ |
 
 ## Match Handler Features
 
