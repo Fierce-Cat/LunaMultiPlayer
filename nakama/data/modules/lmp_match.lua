@@ -385,8 +385,23 @@ function handle_chat(context, dispatcher, state, sender, data)
     end
     chat_timestamps[sender.session_id] = current_time
     
-    -- Sanitize message (basic - remove control characters)
+    -- Sanitize message comprehensively
+    -- Remove control characters
     message = string.gsub(message, "[%c]", "")
+    -- Escape HTML special characters to prevent XSS if displayed in HTML context
+    message = string.gsub(message, "&", "&amp;")
+    message = string.gsub(message, "<", "&lt;")
+    message = string.gsub(message, ">", "&gt;")
+    message = string.gsub(message, '"', "&quot;")
+    message = string.gsub(message, "'", "&#39;")
+    -- Trim whitespace
+    message = string.gsub(message, "^%s+", "")
+    message = string.gsub(message, "%s+$", "")
+    
+    -- Reject empty messages after sanitization
+    if #message == 0 then
+        return
+    end
     
     local chat_msg = json.encode({
         type = "chat",
@@ -458,24 +473,140 @@ function handle_vessel(context, dispatcher, state, sender, data)
     dispatcher.broadcast_message(OP_VESSEL, json.encode(data), nil, sender)
 end
 
+--------------------------------------------------------------------------------
+-- Anti-Cheat System
+--------------------------------------------------------------------------------
+
+-- Rate limiting configuration
+local VESSEL_UPDATE_MIN_INTERVAL_MS = 20 -- Max 50 updates/second per vessel
+local vessel_update_timestamps = {} -- Track last update time per vessel
+
+-- Movement validation thresholds
+local MAX_VELOCITY_CHANGE_PER_SECOND = 1000 -- m/s^2 (very generous for physics warp)
+local MAX_POSITION_TELEPORT = 100000 -- meters (allow for SOI changes)
+
+function validate_vessel_movement(old_vessel, new_data, time_delta)
+    -- Skip validation if no previous data
+    if not old_vessel or not old_vessel.velocity then
+        return true
+    end
+    
+    -- Skip validation if time delta is too small
+    if time_delta <= 0 then
+        return true
+    end
+    
+    -- Check velocity change (acceleration sanity check)
+    if new_data.velocity and old_vessel.velocity then
+        local vel_change = math.sqrt(
+            (new_data.velocity.x - old_vessel.velocity.x)^2 +
+            (new_data.velocity.y - old_vessel.velocity.y)^2 +
+            (new_data.velocity.z - old_vessel.velocity.z)^2
+        )
+        
+        local max_change = MAX_VELOCITY_CHANGE_PER_SECOND * time_delta
+        if vel_change > max_change then
+            return false, "velocity_change_exceeded"
+        end
+    end
+    
+    -- Check position teleportation
+    if new_data.position and old_vessel.position then
+        local pos_change = math.sqrt(
+            (new_data.position.x - old_vessel.position.x)^2 +
+            (new_data.position.y - old_vessel.position.y)^2 +
+            (new_data.position.z - old_vessel.position.z)^2
+        )
+        
+        if pos_change > MAX_POSITION_TELEPORT then
+            return false, "position_teleport_detected"
+        end
+    end
+    
+    return true
+end
+
+-- Track rate limiting timestamps (using Nakama's nk.time for accurate wall clock time)
+local last_rate_check_time = 0
+
+function check_vessel_update_rate(vessel_id)
+    -- Use nk.time() if available (Nakama provides nanoseconds), fallback to os.time()
+    local now
+    local success, time_result = pcall(function() return nk.time() / 1000000 end) -- Convert ns to ms
+    if success then
+        now = time_result
+    else
+        now = os.time() * 1000 -- Fallback to seconds * 1000
+    end
+    
+    local last_update = vessel_update_timestamps[vessel_id] or 0
+    
+    if now - last_update < VESSEL_UPDATE_MIN_INTERVAL_MS then
+        return false
+    end
+    
+    vessel_update_timestamps[vessel_id] = now
+    return true
+end
+
+--------------------------------------------------------------------------------
+-- Vessel Update Handler (with Anti-Cheat)
+--------------------------------------------------------------------------------
+
 function handle_vessel_update(context, dispatcher, state, sender, data)
     -- Delta vessel update (position/velocity)
     if not data or not data.vessel_id then
         return
     end
     
-    local vessel = state.vessels[data.vessel_id]
-    if vessel then
-        -- Update vessel state
-        if data.position then vessel.position = data.position end
-        if data.rotation then vessel.rotation = data.rotation end
-        if data.velocity then vessel.velocity = data.velocity end
-        if data.orbit then vessel.orbit = data.orbit end
-        vessel.last_update = os.time()
-        
-        -- Broadcast to other players
-        dispatcher.broadcast_message(OP_VESSEL_UPDATE, json.encode(data), nil, sender)
+    local vessel_id = data.vessel_id
+    local vessel = state.vessels[vessel_id]
+    
+    if not vessel then
+        return -- Unknown vessel, ignore
     end
+    
+    -- Check if sender has control lock or is owner
+    local control_lock_key = "control:" .. vessel_id
+    local control_lock = state.locks[control_lock_key]
+    if control_lock and control_lock.holder ~= sender.session_id then
+        -- Sender doesn't have control lock
+        if vessel.owner ~= sender.session_id then
+            -- And is not the owner, ignore update
+            return
+        end
+    end
+    
+    -- Anti-cheat: Rate limiting
+    if not check_vessel_update_rate(vessel_id) then
+        nk.logger_debug(string.format("Rate limited vessel update from %s for %s", 
+            sender.username, vessel_id))
+        return
+    end
+    
+    -- Anti-cheat: Movement validation
+    local time_delta = os.time() - (vessel.last_update or os.time())
+    local valid, reason = validate_vessel_movement(vessel, data, time_delta)
+    if not valid then
+        nk.logger_warn(string.format("Suspicious vessel movement from %s: %s", 
+            sender.username, reason))
+        -- Could implement strike system here
+        return
+    end
+    
+    -- Update vessel state
+    if data.position then vessel.position = data.position end
+    if data.rotation then vessel.rotation = data.rotation end
+    if data.velocity then vessel.velocity = data.velocity end
+    if data.angular_velocity then vessel.angular_velocity = data.angular_velocity end
+    if data.orbit then vessel.orbit = data.orbit end
+    if data.throttle then vessel.throttle = data.throttle end
+    if data.stage then vessel.stage = data.stage end
+    vessel.last_update = os.time()
+    vessel.last_update_by = sender.session_id
+    
+    -- Broadcast to other players
+    dispatcher.broadcast_message(OP_VESSEL_UPDATE, json.encode(data), nil, sender)
 end
 
 function handle_vessel_remove(context, dispatcher, state, sender, data)
@@ -483,22 +614,161 @@ function handle_vessel_remove(context, dispatcher, state, sender, data)
         return
     end
     
+    local vessel_id = data.vessel_id
+    local vessel = state.vessels[vessel_id]
+    
+    if vessel then
+        -- Check if sender is owner or admin
+        if vessel.owner ~= sender.session_id and not is_admin(state, sender.session_id) then
+            nk.logger_warn(string.format("Unauthorized vessel remove attempt by %s for %s", 
+                sender.username, vessel_id))
+            return
+        end
+        
+        -- Release any locks on this vessel (using exact match, not pattern)
+        local locks_to_remove = {}
+        for lock_key, lock in pairs(state.locks) do
+            -- Check for exact vessel_id match at end of lock_key (format: "type:vessel_id")
+            local expected_suffix = ":" .. vessel_id
+            if #lock_key >= #expected_suffix and 
+               string.sub(lock_key, -#expected_suffix) == expected_suffix then
+                table.insert(locks_to_remove, lock_key)
+            end
+        end
+        for _, lock_key in ipairs(locks_to_remove) do
+            state.locks[lock_key] = nil
+        end
+    end
+    
     -- Remove vessel from state
-    state.vessels[data.vessel_id] = nil
+    state.vessels[vessel_id] = nil
     
     -- Broadcast removal
-    dispatcher.broadcast_message(OP_VESSEL_REMOVE, json.encode(data))
+    local remove_msg = json.encode({
+        vessel_id = vessel_id,
+        removed_by = sender.session_id,
+    })
+    dispatcher.broadcast_message(OP_VESSEL_REMOVE, remove_msg)
 end
 
+--------------------------------------------------------------------------------
+-- Warp Control System
+--------------------------------------------------------------------------------
+
+-- Warp rate limits (KSP standard)
+local WARP_RATES = {1, 5, 10, 50, 100, 1000, 10000, 100000}
+
 function handle_warp(context, dispatcher, state, sender, data)
-    -- TODO: Implement warp control based on warp_mode
-    -- See Documentation/NakamaIntegration/ServerSideLogic.md for details
-    
     if not data then return end
     
-    -- Broadcast warp change (basic implementation)
-    dispatcher.broadcast_message(OP_WARP, json.encode(data))
+    local player = state.players[sender.session_id]
+    if not player then return end
+    
+    -- Update player warp state
+    local requested_rate = data.warp_rate or 1
+    local requested_subspace = data.subspace_id
+    
+    -- Validate warp rate is in allowed list
+    local valid_rate = false
+    for _, rate in ipairs(WARP_RATES) do
+        if rate == requested_rate then
+            valid_rate = true
+            break
+        end
+    end
+    if not valid_rate then
+        requested_rate = 1
+    end
+    
+    if state.warp_mode == "subspace" then
+        -- Subspace mode: Players can be in different time streams
+        -- Each subspace advances independently
+        player.warp_rate = requested_rate
+        player.subspace_id = requested_subspace or player.subspace_id
+        
+        -- Track subspace times if not exists
+        if not state.subspaces then
+            state.subspaces = {}
+        end
+        if requested_subspace and not state.subspaces[requested_subspace] then
+            state.subspaces[requested_subspace] = {
+                time = state.universe_time,
+                rate = requested_rate,
+                created_by = sender.session_id,
+            }
+        end
+        
+        -- Broadcast warp change
+        local warp_msg = json.encode({
+            type = "warp_change",
+            session_id = sender.session_id,
+            subspace_id = player.subspace_id,
+            warp_rate = player.warp_rate,
+        })
+        dispatcher.broadcast_message(OP_WARP, warp_msg)
+        
+    elseif state.warp_mode == "mcu" then
+        -- MCU (Minimum Common Universe): Slowest player controls time
+        player.warp_rate = requested_rate
+        
+        -- Find minimum warp rate among all players
+        local min_rate = requested_rate
+        for _, p in pairs(state.players) do
+            local p_rate = p.warp_rate or 1
+            if p_rate < min_rate then
+                min_rate = p_rate
+            end
+        end
+        
+        -- Update global warp rate if changed
+        if min_rate ~= state.current_warp_rate then
+            state.current_warp_rate = min_rate
+            local warp_msg = json.encode({
+                type = "warp_sync",
+                warp_rate = min_rate,
+                controller = find_slowest_player(state),
+            })
+            dispatcher.broadcast_message(OP_WARP, warp_msg)
+        end
+        
+    elseif state.warp_mode == "admin" then
+        -- Admin mode: Only admins can change warp
+        if not is_admin(state, sender.session_id) then
+            local deny_msg = json.encode({
+                type = "warp_denied",
+                reason = "Only admins can control warp in admin mode",
+            })
+            dispatcher.broadcast_message(OP_WARP, deny_msg, {sender})
+            return
+        end
+        
+        state.admin_warp_factor = requested_rate
+        local warp_msg = json.encode({
+            type = "warp_sync",
+            warp_rate = requested_rate,
+            controller = sender.session_id,
+        })
+        dispatcher.broadcast_message(OP_WARP, warp_msg)
+    end
 end
+
+-- Find player with slowest warp rate (for MCU mode)
+function find_slowest_player(state)
+    local min_rate = math.huge
+    local slowest = nil
+    for session_id, player in pairs(state.players) do
+        local rate = player.warp_rate or 1
+        if rate < min_rate then
+            min_rate = rate
+            slowest = session_id
+        end
+    end
+    return slowest
+end
+
+--------------------------------------------------------------------------------
+-- Lock System
+--------------------------------------------------------------------------------
 
 function handle_lock(context, dispatcher, state, sender, data)
     if not data or not data.lock_type or not data.lock_id then
@@ -556,30 +826,435 @@ function handle_kerbal(context, dispatcher, state, sender, data)
         return
     end
     
-    -- Update kerbal state
-    state.kerbals[data.kerbal_id] = data
+    -- Update kerbal state with validation
+    local kerbal_id = tostring(data.kerbal_id)
+    state.kerbals[kerbal_id] = {
+        kerbal_id = kerbal_id,
+        name = data.name or "Unknown",
+        type = data.type or "Crew",
+        status = data.status or "Available",
+        vessel_id = data.vessel_id,
+        experience = data.experience or 0,
+        courage = data.courage or 0.5,
+        stupidity = data.stupidity or 0.5,
+        is_badass = data.is_badass or false,
+        updated_by = sender.session_id,
+        updated_at = os.time(),
+    }
     
     -- Broadcast kerbal update
-    dispatcher.broadcast_message(OP_KERBAL, json.encode(data), nil, sender)
+    dispatcher.broadcast_message(OP_KERBAL, json.encode(state.kerbals[kerbal_id]), nil, sender)
 end
 
+--------------------------------------------------------------------------------
+-- Scenario System (Career/Science Mode)
+--------------------------------------------------------------------------------
+
 function handle_scenario(context, dispatcher, state, sender, data)
-    -- Handle career/science mode scenario updates
     if not data or not data.scenario_type then
         return
     end
     
-    -- TODO: Implement scenario module sync
-    -- This includes contracts, tech tree, facilities, etc.
+    local scenario_type = data.scenario_type
     
-    dispatcher.broadcast_message(OP_SCENARIO, json.encode(data), nil, sender)
+    if scenario_type == "science" then
+        -- Science points update
+        if data.science_delta then
+            state.science = state.science + data.science_delta
+            if state.science < 0 then state.science = 0 end
+        end
+        
+        -- Broadcast science update
+        local science_msg = json.encode({
+            scenario_type = "science",
+            science = state.science,
+            updated_by = sender.session_id,
+        })
+        dispatcher.broadcast_message(OP_SCENARIO, science_msg)
+        
+    elseif scenario_type == "funds" then
+        -- Funds update (career mode)
+        if data.funds_delta then
+            state.funds = state.funds + data.funds_delta
+            if state.funds < 0 then state.funds = 0 end
+        end
+        
+        local funds_msg = json.encode({
+            scenario_type = "funds",
+            funds = state.funds,
+            updated_by = sender.session_id,
+        })
+        dispatcher.broadcast_message(OP_SCENARIO, funds_msg)
+        
+    elseif scenario_type == "reputation" then
+        -- Reputation update (career mode)
+        if data.reputation_delta then
+            state.reputation = state.reputation + data.reputation_delta
+            -- Clamp reputation between -1000 and 1000
+            state.reputation = math.max(-1000, math.min(1000, state.reputation))
+        end
+        
+        local rep_msg = json.encode({
+            scenario_type = "reputation",
+            reputation = state.reputation,
+            updated_by = sender.session_id,
+        })
+        dispatcher.broadcast_message(OP_SCENARIO, rep_msg)
+        
+    elseif scenario_type == "tech_unlock" then
+        -- Technology unlocked
+        if data.tech_id then
+            if not state.tech_tree then state.tech_tree = {} end
+            state.tech_tree[data.tech_id] = {
+                unlocked = true,
+                unlocked_by = sender.session_id,
+                unlocked_at = os.time(),
+            }
+            
+            local tech_msg = json.encode({
+                scenario_type = "tech_unlock",
+                tech_id = data.tech_id,
+                unlocked_by = sender.session_id,
+            })
+            dispatcher.broadcast_message(OP_SCENARIO, tech_msg)
+        end
+        
+    elseif scenario_type == "contract" then
+        -- Contract update
+        if data.contract_id then
+            if not state.contracts then state.contracts = {} end
+            state.contracts[data.contract_id] = {
+                contract_id = data.contract_id,
+                status = data.status, -- offered, active, completed, failed
+                updated_by = sender.session_id,
+                updated_at = os.time(),
+            }
+            
+            dispatcher.broadcast_message(OP_SCENARIO, json.encode(data), nil, sender)
+        end
+        
+    elseif scenario_type == "facility" then
+        -- Space center facility upgrade
+        if data.facility_id then
+            if not state.facilities then state.facilities = {} end
+            state.facilities[data.facility_id] = {
+                level = data.level or 1,
+                upgraded_by = sender.session_id,
+                upgraded_at = os.time(),
+            }
+            
+            dispatcher.broadcast_message(OP_SCENARIO, json.encode(data), nil, sender)
+        end
+    else
+        -- Unknown scenario type, just broadcast
+        dispatcher.broadcast_message(OP_SCENARIO, json.encode(data), nil, sender)
+    end
 end
 
+--------------------------------------------------------------------------------
+-- Admin Commands System
+--------------------------------------------------------------------------------
+
+-- Admin list (session_ids with admin privileges)
+local admin_users = {}
+
 function handle_admin(context, dispatcher, state, sender, data)
-    -- TODO: Implement admin commands
-    -- Kick, ban, change settings, etc.
-    nk.logger_info(string.format("Admin command from %s: %s", 
-        sender.username, json.encode(data)))
+    if not data or not data.action then
+        return
+    end
+    
+    -- Check if sender is admin
+    if not is_admin(state, sender.session_id) then
+        nk.logger_warn(string.format("Unauthorized admin command from %s: %s", 
+            sender.username, data.action))
+        
+        local deny_msg = json.encode({
+            type = "admin_denied",
+            reason = "You are not an admin",
+        })
+        dispatcher.broadcast_message(OP_ADMIN, deny_msg, {sender})
+        return
+    end
+    
+    local action = data.action
+    
+    if action == "kick" then
+        -- Kick a player
+        local target_session = data.target_session_id
+        if target_session and state.players[target_session] then
+            local target = state.players[target_session]
+            nk.logger_info(string.format("Admin %s kicked %s", 
+                sender.username, target.username))
+            
+            -- Notify the kicked player
+            local kick_msg = json.encode({
+                type = "kicked",
+                reason = data.reason or "Kicked by admin",
+            })
+            dispatcher.broadcast_message(OP_ADMIN, kick_msg, {{session_id = target_session}})
+            
+            -- Remove from players (they'll be properly disconnected)
+            state.players[target_session] = nil
+            release_player_locks(state, target_session)
+            
+            -- Notify others
+            local notify_msg = json.encode({
+                type = "player_kicked",
+                username = target.username,
+                by = sender.username,
+            })
+            dispatcher.broadcast_message(OP_ADMIN, notify_msg)
+        end
+        
+    elseif action == "ban" then
+        -- Ban a player (requires Nakama storage)
+        local target_user_id = data.target_user_id
+        if target_user_id then
+            -- Store ban in Nakama storage
+            local ban_record = {
+                user_id = target_user_id,
+                banned_by = sender.session_id,
+                reason = data.reason or "Banned by admin",
+                banned_at = os.time(),
+                expires_at = data.duration and (os.time() + data.duration) or nil,
+            }
+            
+            nk.storage_write({
+                {
+                    collection = "bans",
+                    key = target_user_id,
+                    user_id = nil, -- System-owned
+                    value = ban_record,
+                    permission_read = 0,
+                    permission_write = 0,
+                }
+            })
+            
+            nk.logger_info(string.format("Admin %s banned user %s", 
+                sender.username, target_user_id))
+            
+            -- If player is connected, kick them
+            for session_id, player in pairs(state.players) do
+                if player.user_id == target_user_id then
+                    local ban_msg = json.encode({
+                        type = "banned",
+                        reason = ban_record.reason,
+                    })
+                    dispatcher.broadcast_message(OP_ADMIN, ban_msg, {{session_id = session_id}})
+                    state.players[session_id] = nil
+                    release_player_locks(state, session_id)
+                end
+            end
+        end
+        
+    elseif action == "unban" then
+        -- Remove a ban
+        local target_user_id = data.target_user_id
+        if target_user_id then
+            nk.storage_delete({
+                {collection = "bans", key = target_user_id}
+            })
+            nk.logger_info(string.format("Admin %s unbanned user %s", 
+                sender.username, target_user_id))
+        end
+        
+    elseif action == "set_warp_mode" then
+        -- Change warp mode
+        local new_mode = data.warp_mode
+        if new_mode == "subspace" or new_mode == "mcu" or new_mode == "admin" then
+            state.warp_mode = new_mode
+            
+            local mode_msg = json.encode({
+                type = "settings_changed",
+                setting = "warp_mode",
+                value = new_mode,
+                by = sender.username,
+            })
+            dispatcher.broadcast_message(OP_SETTINGS, mode_msg)
+            nk.logger_info(string.format("Admin %s set warp mode to %s", 
+                sender.username, new_mode))
+        end
+        
+    elseif action == "set_game_mode" then
+        -- Change game mode (sandbox/science/career)
+        local new_mode = data.game_mode
+        if new_mode == "sandbox" or new_mode == "science" or new_mode == "career" then
+            state.game_mode = new_mode
+            
+            local mode_msg = json.encode({
+                type = "settings_changed",
+                setting = "game_mode",
+                value = new_mode,
+                by = sender.username,
+            })
+            dispatcher.broadcast_message(OP_SETTINGS, mode_msg)
+            update_match_label(state, dispatcher)
+            nk.logger_info(string.format("Admin %s set game mode to %s", 
+                sender.username, new_mode))
+        end
+        
+    elseif action == "grant_admin" then
+        -- Grant admin to another player
+        local target_session = data.target_session_id
+        if target_session and state.players[target_session] then
+            admin_users[target_session] = true
+            
+            local grant_msg = json.encode({
+                type = "admin_granted",
+                session_id = target_session,
+                username = state.players[target_session].username,
+            })
+            dispatcher.broadcast_message(OP_ADMIN, grant_msg)
+            nk.logger_info(string.format("Admin %s granted admin to %s", 
+                sender.username, state.players[target_session].username))
+        end
+        
+    elseif action == "revoke_admin" then
+        -- Revoke admin from a player
+        local target_session = data.target_session_id
+        if target_session then
+            admin_users[target_session] = nil
+            
+            local revoke_msg = json.encode({
+                type = "admin_revoked",
+                session_id = target_session,
+            })
+            dispatcher.broadcast_message(OP_ADMIN, revoke_msg)
+        end
+        
+    elseif action == "save_state" then
+        -- Force save server state
+        save_match_state(state)
+        
+        local save_msg = json.encode({
+            type = "state_saved",
+            by = sender.username,
+            at = os.time(),
+        })
+        dispatcher.broadcast_message(OP_ADMIN, save_msg)
+        nk.logger_info(string.format("Admin %s triggered state save", sender.username))
+        
+    elseif action == "announce" then
+        -- Server announcement
+        local announcement = json.encode({
+            type = "announcement",
+            message = data.message or "",
+            by = sender.username,
+        })
+        dispatcher.broadcast_message(OP_ADMIN, announcement)
+        
+    else
+        nk.logger_warn(string.format("Unknown admin action: %s", action))
+    end
+end
+
+-- Check if a session is an admin
+function is_admin(state, session_id)
+    -- First player to join is automatically admin (server owner)
+    -- Simplified: if only 1 player and it's this session, they're admin
+    if table_length(state.players) == 1 and state.players[session_id] ~= nil then
+        return true
+    end
+    
+    return admin_users[session_id] == true
+end
+
+-- Check if a user is banned
+function is_user_banned(user_id)
+    local result = nk.storage_read({
+        {collection = "bans", key = user_id}
+    })
+    
+    if #result > 0 then
+        local ban = result[1].value
+        -- Check if ban has expired
+        if ban.expires_at and ban.expires_at < os.time() then
+            -- Ban expired, remove it
+            nk.storage_delete({
+                {collection = "bans", key = user_id}
+            })
+            return false
+        end
+        return true
+    end
+    
+    return false
+end
+
+--------------------------------------------------------------------------------
+-- Persistence System
+--------------------------------------------------------------------------------
+
+function save_match_state(state)
+    -- Save server state to Nakama storage
+    local save_data = {
+        -- Server info
+        server_name = state.server_name,
+        game_mode = state.game_mode,
+        warp_mode = state.warp_mode,
+        
+        -- Time
+        universe_time = state.universe_time,
+        
+        -- Vessels (excluding transient data)
+        vessels = {},
+        kerbals = state.kerbals,
+        
+        -- Career/Science data
+        science = state.science,
+        funds = state.funds,
+        reputation = state.reputation,
+        tech_tree = state.tech_tree,
+        contracts = state.contracts,
+        facilities = state.facilities,
+        
+        -- Metadata
+        saved_at = os.time(),
+        player_count = table_length(state.players),
+    }
+    
+    -- Copy vessel data (without transient position data)
+    for vessel_id, vessel in pairs(state.vessels) do
+        save_data.vessels[vessel_id] = {
+            vessel_id = vessel.vessel_id,
+            vessel_name = vessel.vessel_name,
+            vessel_type = vessel.vessel_type,
+            owner = vessel.owner,
+            orbit = vessel.orbit,
+            parts = vessel.parts,
+        }
+    end
+    
+    local success, err = pcall(function()
+        nk.storage_write({
+            {
+                collection = "match_saves",
+                key = state.server_name,
+                user_id = nil, -- System-owned
+                value = save_data,
+                permission_read = 1, -- Public read
+                permission_write = 0, -- No write
+            }
+        })
+    end)
+    
+    if success then
+        nk.logger_info(string.format("Match state saved: %s", state.server_name))
+    else
+        nk.logger_error(string.format("Failed to save match state: %s", err))
+    end
+end
+
+function load_match_state(server_name)
+    local result = nk.storage_read({
+        {collection = "match_saves", key = server_name}
+    })
+    
+    if #result > 0 then
+        return result[1].value
+    end
+    
+    return nil
 end
 
 --------------------------------------------------------------------------------

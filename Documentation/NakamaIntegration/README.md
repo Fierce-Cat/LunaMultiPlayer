@@ -8,7 +8,7 @@
 | **Phase 2.1** | Network Abstraction Layer | ✅ Complete | 9 tests |
 | **Phase 2.2** | Lidgren Adapter | ✅ Complete | - |
 | **Phase 2.3** | Nakama Adapter | ✅ Complete | 22 tests |
-| **Phase 3** | Server-Side Logic | 🔄 Next | - |
+| **Phase 3** | Server-Side Logic | 🔄 In Progress | - |
 | **Phase 4** | Social Features | ⏳ Pending | - |
 | **Phase 5** | Production Deployment | ⏳ Pending | - |
 
@@ -20,6 +20,15 @@
 - ✅ `LmpClient/Network/Adapters/NakamaNetworkConnection.cs` - Nakama WebSocket adapter
 - ✅ `LmpClient/Network/NetworkConnectionFactory.cs` - Factory for backend switching
 - ✅ `LmpNetworkTest/` - Comprehensive test suite
+- 🔄 `nakama/data/modules/lmp_match.lua` - Server-side match handler (~1000 lines)
+  - ✅ Match lifecycle (init, join, loop, leave, terminate)
+  - ✅ Warp control (subspace, MCU, admin modes)
+  - ✅ Anti-cheat (rate limiting, movement validation)
+  - ✅ Admin commands (kick, ban, settings)
+  - ✅ Scenario support (science, funds, tech tree, contracts)
+  - ✅ Persistence (Nakama storage)
+- 🔄 `nakama/docker-compose.yml` - Development environment
+- 🔄 `nakama/README.md` - Setup documentation
 
 ---
 
@@ -350,7 +359,7 @@ return M
 - `LmpClient/Network/Adapters/` - Lidgren & Nakama adapters
 - `LmpNetworkTest/` - 31 unit tests (all passing)
 
-### Phase 3: Server-Side Logic (4-8 weeks) 🔄 NEXT
+### Phase 3: Server-Side Logic (4-8 weeks) 🔄 IN PROGRESS
 
 **Deliverables:**
 - Server-side validation on Nakama
@@ -358,13 +367,23 @@ return M
 - All game logic in Nakama handlers
 - Persistent storage migrated
 
-**Tasks:**
-- [ ] Create Nakama match handler (Lua)
-- [ ] Implement vessel synchronization logic
-- [ ] Implement warp control system
-- [ ] Implement lock system
-- [ ] Add anti-cheat validation
-- [ ] Migrate persistence to Nakama storage
+**Completed Tasks:**
+- [x] Create Nakama match handler (Lua) - `nakama/data/modules/lmp_match.lua` (~1000 lines)
+- [x] Implement match lifecycle (init, join, loop, leave, terminate)
+- [x] Implement warp control system (subspace, MCU, admin modes)
+- [x] Implement lock system (acquire, release, ownership)
+- [x] Add anti-cheat validation (rate limiting, movement validation)
+- [x] Implement admin commands (kick, ban, settings, announcements)
+- [x] Implement scenario system (science, funds, tech tree, contracts)
+- [x] Migrate persistence to Nakama storage (save/load state)
+- [x] Create development environment (docker-compose.yml)
+- [x] Document server setup (nakama/README.md)
+
+**Remaining Tasks:**
+- [ ] Integration testing with actual Nakama server
+- [ ] Client integration with match handler
+- [ ] Performance profiling and optimization
+- [ ] Edge case handling and error recovery
 
 **Risks:**
 - Learning curve for Lua/Go
