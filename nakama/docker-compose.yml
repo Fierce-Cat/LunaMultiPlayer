@@ -1,0 +1,69 @@
+# LunaMultiplayer Nakama Development Environment
+# 
+# Usage:
+#   docker-compose up -d    # Start Nakama server
+#   docker-compose logs -f  # View logs
+#   docker-compose down     # Stop server
+#
+# Access:
+#   - Nakama Console: http://localhost:7351
+#   - Client API: http://localhost:7350
+#   - gRPC API: http://localhost:7349
+#
+# Default Console Login:
+#   Username: admin
+#   Password: password
+
+version: '3.8'
+
+services:
+  postgres:
+    container_name: lmp_postgres
+    image: postgres:14-alpine
+    environment:
+      POSTGRES_DB: nakama
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: localdb
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d nakama"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  nakama:
+    container_name: lmp_nakama
+    image: heroiclabs/nakama:3.20.1
+    depends_on:
+      postgres:
+        condition: service_healthy
+    entrypoint:
+      - /bin/sh
+      - -ecx
+      - |
+        /nakama/nakama migrate up --database.address postgres:localdb@postgres:5432/nakama && \
+        exec /nakama/nakama --name nakama1 \
+          --database.address postgres:localdb@postgres:5432/nakama \
+          --logger.level DEBUG \
+          --session.token_expiry_sec 7200 \
+          --socket.server_key "lmp_server_key" \
+          --runtime.path /nakama/data/modules
+    volumes:
+      - ./data/modules:/nakama/data/modules:ro
+    ports:
+      - "7349:7349"  # gRPC API
+      - "7350:7350"  # HTTP API
+      - "7351:7351"  # Console
+    healthcheck:
+      test: ["CMD", "/nakama/nakama", "healthcheck"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
