@@ -30,7 +30,12 @@ namespace LmpCommon.Message.Data.Scenario
 
             lidgrenMsg.ReadBytes(Data, 0, NumBytes);
 
-            Common.ThreadSafeDecompress(this, ref Data, NumBytes, out NumBytes);
+            if (!Common.ThreadSafeDecompress(this, ref Data, NumBytes, out NumBytes))
+            {
+                // Decompression failed - data is corrupted
+                NumBytes = 0;
+                Data = new byte[0];
+            }
         }
 
         public int GetByteCount()

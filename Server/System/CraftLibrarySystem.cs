@@ -81,8 +81,10 @@ namespace Server.System
                     else
                     {
                         LunaLog.Normal($"Saving craft {data.Craft.CraftName} ({ByteSize.FromBytes(data.Craft.NumBytes).KiloBytes} KB) from: {client.PlayerName}.");
-                        FileHandler.WriteToFile(fullPath, data.Craft.Data, data.Craft.NumBytes);
                     }
+
+                    // Write the craft file (both for new and overwrite cases)
+                    FileHandler.WriteToFile(fullPath, data.Craft.Data, data.Craft.NumBytes);
                     SendNotification(client.PlayerName);
                 }
                 else

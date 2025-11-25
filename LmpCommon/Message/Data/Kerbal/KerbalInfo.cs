@@ -29,7 +29,12 @@ namespace LmpCommon.Message.Data.Kerbal
 
             lidgrenMsg.ReadBytes(KerbalData, 0, NumBytes);
 
-            Common.ThreadSafeDecompress(this, ref KerbalData, NumBytes, out NumBytes);
+            if (!Common.ThreadSafeDecompress(this, ref KerbalData, NumBytes, out NumBytes))
+            {
+                // Decompression failed - data is corrupted
+                NumBytes = 0;
+                KerbalData = new byte[0];
+            }
         }
 
         public int GetByteCount()
