@@ -16,7 +16,7 @@ The following components have been implemented in `LmpCommon/Network/`:
 | `DeliveryMethod.cs` | Message delivery method enum | ✅ Implemented |
 | `NetworkStatisticsBase.cs` | Base statistics implementation | ✅ Implemented |
 
-**Tests:** All 9 unit tests pass (see `LmpNetworkTest/NetworkAbstractionTests.cs`)
+**Tests:** 9 unit tests pass (see `LmpNetworkTest/NetworkAbstractionTests.cs`)
 
 ✅ **Completed Phase 2.2: Lidgren Adapter**
 
@@ -52,6 +52,8 @@ The Nakama adapter has been implemented in `LmpClient/Network/Adapters/`:
 - Message type mapping via op codes
 - Connection statistics tracking
 - Proper disposal and cleanup
+
+**Tests:** 22 unit tests pass (see `LmpNetworkTest/NakamaAdapterTests.cs`)
 
 **Note:** The implementation is ready for Nakama SDK integration. When the `NakamaClient` NuGet package is installed, uncomment the SDK-specific code sections.
 
