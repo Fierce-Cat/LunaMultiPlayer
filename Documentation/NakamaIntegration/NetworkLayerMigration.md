@@ -18,6 +18,27 @@ The following components have been implemented in `LmpCommon/Network/`:
 
 **Tests:** All 9 unit tests pass (see `LmpNetworkTest/NetworkAbstractionTests.cs`)
 
+✅ **Completed Phase 2.2: Lidgren Adapter**
+
+The following adapters have been implemented in `LmpClient/Network/`:
+
+| File | Description | Status |
+|------|-------------|--------|
+| `Adapters/LidgrenNetworkConnection.cs` | Lidgren UDP adapter implementing INetworkConnection | ✅ Implemented |
+| `NetworkConnectionFactory.cs` | Factory for creating network connections | ✅ Implemented |
+
+**Features implemented:**
+- Full INetworkConnection interface implementation
+- Async connect with multiple endpoint support
+- Message receive loop with proper message type handling
+- Delivery method mapping (Unreliable, Sequenced, Ordered)
+- Connection statistics tracking
+- Proper disposal and cleanup
+
+🔄 **Pending Phase 2.3: Nakama Adapter**
+
+The Nakama adapter placeholder exists in `NetworkConnectionFactory` but implementation is pending.
+
 ## Overview
 
 The migration follows the Adapter Pattern, allowing both Lidgren and Nakama to coexist during the transition period. This enables gradual testing and rollback if issues arise.

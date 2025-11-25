@@ -457,6 +457,8 @@
     <Compile Include="Base\Window.cs" />
     <Compile Include="Base\SystemWindow.cs" />
     <Compile Include="GlobalSuppressions.cs" />
+    <Compile Include="Network\Adapters\LidgrenNetworkConnection.cs" />
+    <Compile Include="Network\NetworkConnectionFactory.cs" />
     <Compile Include="Network\NetworkMain.cs" />
     <Compile Include="Network\NetworkStatistics.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
