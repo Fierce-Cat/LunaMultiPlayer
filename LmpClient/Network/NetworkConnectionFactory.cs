@@ -11,6 +11,11 @@ namespace LmpClient.Network
     public static class NetworkConnectionFactory
     {
         /// <summary>
+        /// Default Nakama server key. Override with actual server key in production.
+        /// </summary>
+        public static string NakamaServerKey { get; set; } = "defaultkey";
+
+        /// <summary>
         /// Available network backends
         /// </summary>
         public enum NetworkBackend
@@ -21,7 +26,8 @@ namespace LmpClient.Network
             Lidgren,
 
             /// <summary>
-            /// Nakama WebSocket-based networking (future implementation)
+            /// Nakama WebSocket-based networking
+            /// Requires NakamaClient NuGet package to be installed
             /// </summary>
             Nakama
         }
@@ -36,13 +42,12 @@ namespace LmpClient.Network
             switch (backend)
             {
                 case NetworkBackend.Nakama:
-                    // Nakama implementation will be added in Phase 2.3
-                    // For now, fall back to Lidgren
-                    LunaLog.Log("[LMP]: Nakama backend not yet implemented, using Lidgren");
-                    return new LidgrenNetworkConnection(NetworkMain.Config);
+                    LunaLog.Log("[LMP]: Creating Nakama network connection");
+                    return new NakamaNetworkConnection(NakamaServerKey);
 
                 case NetworkBackend.Lidgren:
                 default:
+                    LunaLog.Log("[LMP]: Creating Lidgren network connection");
                     return new LidgrenNetworkConnection(NetworkMain.Config);
             }
         }
@@ -54,6 +59,16 @@ namespace LmpClient.Network
         public static INetworkConnection CreateLidgren()
         {
             return new LidgrenNetworkConnection(NetworkMain.Config);
+        }
+
+        /// <summary>
+        /// Create a Nakama network connection with the specified server key
+        /// </summary>
+        /// <param name="serverKey">Nakama server key (optional, uses default if not specified)</param>
+        /// <returns>A Nakama network connection</returns>
+        public static INetworkConnection CreateNakama(string serverKey = null)
+        {
+            return new NakamaNetworkConnection(serverKey ?? NakamaServerKey);
         }
     }
 }
