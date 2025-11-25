@@ -48,7 +48,12 @@ namespace LmpCommon.Message.Data.ShareProgress
 
             lidgrenMsg.ReadBytes(Data, 0, NumBytes);
 
-            Common.ThreadSafeDecompress(this, ref Data, NumBytes, out NumBytes);
+            if (!Common.ThreadSafeDecompress(this, ref Data, NumBytes, out NumBytes))
+            {
+                // Decompression failed - data is corrupted
+                NumBytes = 0;
+                Data = Array.Empty<byte>();
+            }
         }
 
         public int GetByteCount()
