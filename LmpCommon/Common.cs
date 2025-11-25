@@ -45,9 +45,9 @@ namespace LmpCommon
                         CachedQlz.Decompress(ref data, out numBytes);
                         return true;
                     }
-                    catch (Exception)
+                    catch (ArgumentException)
                     {
-                        // Decompression failed - data is corrupted
+                        // Decompression failed - data is corrupted (array bounds or parameter issues)
                         numBytes = 0;
                         return false;
                     }
