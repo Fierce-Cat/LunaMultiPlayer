@@ -11,6 +11,7 @@ namespace LmpCommon.Network
         private long _bytesReceived;
         private long _messagesSent;
         private long _messagesReceived;
+        private double _roundTripTimeMs;
 
         /// <inheritdoc />
         public long BytesSent => Interlocked.Read(ref _bytesSent);
@@ -25,7 +26,11 @@ namespace LmpCommon.Network
         public long MessagesReceived => Interlocked.Read(ref _messagesReceived);
 
         /// <inheritdoc />
-        public double RoundTripTimeMs { get; set; }
+        public double RoundTripTimeMs
+        {
+            get => Volatile.Read(ref _roundTripTimeMs);
+            set => Volatile.Write(ref _roundTripTimeMs, value);
+        }
 
         /// <summary>
         /// Record a sent message
@@ -56,7 +61,7 @@ namespace LmpCommon.Network
             Interlocked.Exchange(ref _bytesReceived, 0);
             Interlocked.Exchange(ref _messagesSent, 0);
             Interlocked.Exchange(ref _messagesReceived, 0);
-            RoundTripTimeMs = 0;
+            Volatile.Write(ref _roundTripTimeMs, 0);
         }
     }
 }
