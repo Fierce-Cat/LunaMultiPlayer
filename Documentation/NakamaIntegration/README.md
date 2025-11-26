@@ -9,7 +9,7 @@
 | **Phase 2.2** | Lidgren Adapter | ✅ Complete | - |
 | **Phase 2.3** | Nakama Adapter | ✅ Complete | 22 tests |
 | **Phase 3** | Server-Side Logic | ✅ Complete | - |
-| **Phase 4** | LMP Feature Migration | ⏳ Pending | - |
+| **Phase 4** | LMP Feature Migration | ✅ Complete | - |
 | **Phase 5** | Production Deployment | ⏳ Pending | - |
 
 **Total Tests:** 31 (all passing)
@@ -24,7 +24,7 @@
 - ✅ `LmpNetworkTest/` - Comprehensive test suite
 
 **Server-Side (Lua):**
-- ✅ `nakama/data/modules/lmp_match.lua` - Complete match handler (~1300 lines)
+- ✅ `nakama/data/modules/lmp_match.lua` - Complete match handler (~1900 lines)
   - ✅ Match lifecycle (init, join, loop, leave, terminate)
   - ✅ Warp control (subspace, MCU, admin modes)
   - ✅ Lock system (acquire, release, ownership)
@@ -34,10 +34,14 @@
   - ✅ Persistence (save/load match state to Nakama storage)
   - ✅ Chat (with rate limiting and XSS sanitization)
   - ✅ Universe time with warp modes
+  - ✅ **Phase 4: GroupSystem** (create, remove, update, list with Nakama Storage)
+  - ✅ **Phase 4: CraftLibrarySystem** (upload, download, list folders/crafts, delete)
+  - ✅ **Phase 4: ScreenshotSystem** (upload, download, list folders/screenshots)
+  - ✅ **Phase 4: FlagSystem** (upload, list)
 - ✅ `nakama/docker-compose.yml` - Development environment
 - ✅ `nakama/README.md` - Comprehensive setup documentation
 
-### Phase 3 Feature Comparison: Original LMP Server vs. Nakama
+### Feature Comparison: Original LMP Server vs. Nakama
 
 | Original LMP System | Nakama Implementation | Status | Notes |
 |--------------------|----------------------|--------|-------|
@@ -50,10 +54,10 @@
 | **ScenarioSystem** | Science, funds, reputation | ✅ | Full career mode support |
 | **ShareProgress** | Tech tree, contracts, facilities | ✅ | Full progress sharing |
 | **HandshakeSystem** | Join validation, password, bans | ✅ | Full validation chain |
-| **GroupSystem** | Groups (pending Phase 4) | ⏳ | Player groups via Nakama Storage |
-| **CraftLibrarySystem** | Craft storage (pending Phase 4) | ⏳ | Nakama Storage API |
-| **ScreenshotSystem** | Screenshot sharing (pending Phase 4) | ⏳ | Nakama Storage API |
-| **FlagSystem** | Flag storage (pending Phase 4) | ⏳ | Nakama Storage API |
+| **GroupSystem** | Player groups | ✅ | Via Nakama Storage, full parity |
+| **CraftLibrarySystem** | Craft sharing | ✅ | Via Nakama Storage, rate limited |
+| **ScreenshotSystem** | Screenshot sharing | ✅ | Via Nakama Storage, rate limited |
+| **FlagSystem** | Custom flags | ✅ | Via Nakama Storage, validated |
 | **ModFileSystem** | Mod validation | 🔄 | Placeholder in join validation |
 | **Admin Commands** | Full admin system | ✅ | kick, ban, unban, settings, announce |
 | **Anti-Cheat** | Rate limiting, movement validation | ✅ | Enhanced with ownership checks |

@@ -1,9 +1,10 @@
 -- LunaMultiplayer Match Handler for Nakama
--- Version: 1.0
--- Phase 3 Implementation
+-- Version: 2.0
+-- Phase 3 + Phase 4 Implementation
 --
 -- This module implements the server-side game logic for LunaMultiplayer
 -- Reference: Documentation/NakamaIntegration/ServerSideLogic.md
+-- Reference: Documentation/NakamaIntegration/SocialFeatures.md
 
 local nk = require("nakama")
 local json = require("json")
@@ -13,6 +14,7 @@ local M = {}
 --------------------------------------------------------------------------------
 -- Op Codes (matching LMP message types)
 --------------------------------------------------------------------------------
+-- Phase 3: Core Systems
 local OP_HANDSHAKE = 1
 local OP_CHAT = 2
 local OP_PLAYER_STATUS = 3
@@ -28,6 +30,34 @@ local OP_LOCK = 50
 local OP_SCENARIO = 60
 local OP_SHARE_PROGRESS = 70
 local OP_ADMIN = 100
+
+-- Phase 4: Group System
+local OP_GROUP_CREATE = 80
+local OP_GROUP_REMOVE = 81
+local OP_GROUP_UPDATE = 82
+local OP_GROUP_LIST = 83
+
+-- Phase 4: Craft Library System
+local OP_CRAFT_UPLOAD = 90
+local OP_CRAFT_DOWNLOAD_REQUEST = 91
+local OP_CRAFT_DOWNLOAD_RESPONSE = 92
+local OP_CRAFT_LIST_FOLDERS = 93
+local OP_CRAFT_LIST_CRAFTS = 94
+local OP_CRAFT_DELETE = 95
+local OP_CRAFT_NOTIFICATION = 96
+
+-- Phase 4: Screenshot System
+local OP_SCREENSHOT_UPLOAD = 110
+local OP_SCREENSHOT_DOWNLOAD_REQUEST = 111
+local OP_SCREENSHOT_DOWNLOAD_RESPONSE = 112
+local OP_SCREENSHOT_LIST_FOLDERS = 113
+local OP_SCREENSHOT_LIST = 114
+local OP_SCREENSHOT_NOTIFICATION = 115
+
+-- Phase 4: Flag System
+local OP_FLAG_UPLOAD = 120
+local OP_FLAG_LIST_REQUEST = 121
+local OP_FLAG_LIST_RESPONSE = 122
 
 --------------------------------------------------------------------------------
 -- Server Configuration
@@ -67,11 +97,20 @@ function M.match_init(context, setupstate)
         contracts = {},
         tech_tree = {},
         
+        -- Phase 4: Groups (player groups/alliances)
+        groups = {},
+        
         -- Statistics
         tick_count = 0,
         messages_processed = 0,
         last_sync_time = os.time(),
     }
+    
+    -- Load existing groups from storage
+    local saved_groups = load_groups()
+    if saved_groups then
+        state.groups = saved_groups
+    end
     
     local tick_rate = setupstate.tick_rate or DEFAULT_TICK_RATE
     local label = json.encode({
@@ -346,6 +385,22 @@ function process_message(context, dispatcher, state, message)
         handle_scenario(context, dispatcher, state, sender, parsed_data)
     elseif op_code == OP_ADMIN then
         handle_admin(context, dispatcher, state, sender, parsed_data)
+    -- Phase 4: Group System
+    elseif op_code == OP_GROUP_CREATE or op_code == OP_GROUP_REMOVE or 
+           op_code == OP_GROUP_UPDATE or op_code == OP_GROUP_LIST then
+        handle_group(context, dispatcher, state, sender, op_code, parsed_data)
+    -- Phase 4: Craft Library System
+    elseif op_code == OP_CRAFT_UPLOAD or op_code == OP_CRAFT_DOWNLOAD_REQUEST or
+           op_code == OP_CRAFT_LIST_FOLDERS or op_code == OP_CRAFT_LIST_CRAFTS or
+           op_code == OP_CRAFT_DELETE then
+        handle_craft_library(context, dispatcher, state, sender, op_code, parsed_data)
+    -- Phase 4: Screenshot System
+    elseif op_code == OP_SCREENSHOT_UPLOAD or op_code == OP_SCREENSHOT_DOWNLOAD_REQUEST or
+           op_code == OP_SCREENSHOT_LIST_FOLDERS or op_code == OP_SCREENSHOT_LIST then
+        handle_screenshot(context, dispatcher, state, sender, op_code, parsed_data)
+    -- Phase 4: Flag System
+    elseif op_code == OP_FLAG_UPLOAD or op_code == OP_FLAG_LIST_REQUEST then
+        handle_flag(context, dispatcher, state, sender, op_code, parsed_data)
     else
         nk.logger_warn(string.format("Unknown op_code %d from %s", 
             op_code, sender.username))
@@ -530,15 +585,8 @@ end
 local last_rate_check_time = 0
 
 function check_vessel_update_rate(vessel_id)
-    -- Use nk.time() if available (Nakama provides nanoseconds), fallback to os.time()
-    local now
-    local success, time_result = pcall(function() return nk.time() / 1000000 end) -- Convert ns to ms
-    if success then
-        now = time_result
-    else
-        now = os.time() * 1000 -- Fallback to seconds * 1000
-    end
-    
+    -- Use get_time_ms helper for consistent time handling
+    local now = get_time_ms()
     local last_update = vessel_update_timestamps[vessel_id] or 0
     
     if now - last_update < VESSEL_UPDATE_MIN_INTERVAL_MS then
@@ -1258,8 +1306,638 @@ function load_match_state(server_name)
 end
 
 --------------------------------------------------------------------------------
+-- Phase 4: Group System
+--------------------------------------------------------------------------------
+
+function handle_group(context, dispatcher, state, sender, op_code, data)
+    if op_code == OP_GROUP_CREATE then
+        create_group(state, sender, data, dispatcher)
+    elseif op_code == OP_GROUP_REMOVE then
+        remove_group(state, sender, data, dispatcher)
+    elseif op_code == OP_GROUP_UPDATE then
+        update_group(state, sender, data, dispatcher)
+    elseif op_code == OP_GROUP_LIST then
+        list_groups(state, sender, dispatcher)
+    end
+end
+
+function create_group(state, sender, data, dispatcher)
+    if not data or not data.group_name then
+        return
+    end
+    
+    local group_name = data.group_name
+    local player = state.players[sender.session_id]
+    if not player then return end
+    local player_name = player.username
+    
+    -- Check if group already exists
+    if state.groups[group_name] then
+        nk.logger_warn(string.format("Group %s already exists", group_name))
+        return
+    end
+    
+    -- Create new group
+    state.groups[group_name] = {
+        name = group_name,
+        owner = player_name,
+        members = { player_name },
+        invited = {},
+        members_count = 1
+    }
+    
+    -- Broadcast group creation to all players
+    local msg = json.encode({ group = state.groups[group_name] })
+    dispatcher.broadcast_message(OP_GROUP_UPDATE, msg)
+    
+    -- Save groups to storage
+    save_groups(state)
+    
+    nk.logger_info(string.format("Group %s created by %s", group_name, player_name))
+end
+
+function remove_group(state, sender, data, dispatcher)
+    if not data or not data.group_name then
+        return
+    end
+    
+    local group_name = data.group_name
+    local player = state.players[sender.session_id]
+    if not player then return end
+    local player_name = player.username
+    
+    local group = state.groups[group_name]
+    if not group then return end
+    
+    -- Only owner can remove group
+    if group.owner ~= player_name then
+        nk.logger_warn(string.format("%s tried to remove group %s but is not owner", 
+            player_name, group_name))
+        return
+    end
+    
+    -- Remove group
+    state.groups[group_name] = nil
+    
+    -- Broadcast group removal to all players
+    local msg = json.encode({ group_name = group_name })
+    dispatcher.broadcast_message(OP_GROUP_REMOVE, msg)
+    
+    -- Save groups to storage
+    save_groups(state)
+    
+    nk.logger_info(string.format("Group %s removed by %s", group_name, player_name))
+end
+
+function update_group(state, sender, data, dispatcher)
+    if not data or not data.group then
+        return
+    end
+    
+    local group = data.group
+    local player = state.players[sender.session_id]
+    if not player then return end
+    local player_name = player.username
+    
+    local existing = state.groups[group.name]
+    if not existing then
+        return
+    end
+    
+    if existing.owner == player_name then
+        -- Owner can do whatever they want
+        state.groups[group.name] = group
+        state.groups[group.name].members_count = #group.members
+    else
+        -- Non-owner can only add themselves to invited list
+        if group.owner == existing.owner then
+            for _, inv in ipairs(group.invited or {}) do
+                if inv == player_name then
+                    -- Add player to invited list
+                    local already_invited = false
+                    for _, existing_inv in ipairs(existing.invited or {}) do
+                        if existing_inv == player_name then
+                            already_invited = true
+                            break
+                        end
+                    end
+                    if not already_invited then
+                        if not existing.invited then existing.invited = {} end
+                        table.insert(existing.invited, player_name)
+                    end
+                    break
+                end
+            end
+        end
+    end
+    
+    -- Broadcast group update to all players
+    local msg = json.encode({ group = state.groups[group.name] })
+    dispatcher.broadcast_message(OP_GROUP_UPDATE, msg)
+    
+    -- Save groups to storage
+    save_groups(state)
+end
+
+function list_groups(state, sender, dispatcher)
+    local msg = json.encode({ groups = state.groups })
+    dispatcher.broadcast_message(OP_GROUP_LIST, msg, { sender })
+end
+
+function save_groups(state)
+    local success, err = pcall(function()
+        nk.storage_write({
+            {
+                collection = "lmp_data",
+                key = "groups",
+                user_id = nil,
+                value = { groups = state.groups },
+                permission_read = 2,
+                permission_write = 0
+            }
+        })
+    end)
+    
+    if not success then
+        nk.logger_error(string.format("Failed to save groups: %s", err))
+    end
+end
+
+function load_groups()
+    local success, result = pcall(function()
+        return nk.storage_read({
+            { collection = "lmp_data", key = "groups", user_id = nil }
+        })
+    end)
+    
+    if success and result and #result > 0 then
+        local data = result[1].value
+        return data.groups or {}
+    end
+    return {}
+end
+
+--------------------------------------------------------------------------------
+-- Phase 4: Craft Library System
+--------------------------------------------------------------------------------
+
+local craft_rate_limits = {}
+local CRAFT_RATE_LIMIT_MS = 5000 -- 5 seconds between uploads/downloads
+
+function handle_craft_library(context, dispatcher, state, sender, op_code, data)
+    if op_code == OP_CRAFT_UPLOAD then
+        upload_craft(state, sender, data, dispatcher)
+    elseif op_code == OP_CRAFT_DOWNLOAD_REQUEST then
+        download_craft(state, sender, data, dispatcher)
+    elseif op_code == OP_CRAFT_LIST_FOLDERS then
+        list_craft_folders(state, sender, dispatcher)
+    elseif op_code == OP_CRAFT_LIST_CRAFTS then
+        list_crafts(state, sender, data, dispatcher)
+    elseif op_code == OP_CRAFT_DELETE then
+        delete_craft(state, sender, data, dispatcher)
+    end
+end
+
+function upload_craft(state, sender, data, dispatcher)
+    if not data or not data.craft_name or not data.craft_type or not data.craft_data then
+        return
+    end
+    
+    local user_id = sender.user_id
+    local player = state.players[sender.session_id]
+    if not player then return end
+    local player_name = player.username
+    
+    -- Rate limiting
+    local now = get_time_ms()
+    if craft_rate_limits[user_id] and now - craft_rate_limits[user_id] < CRAFT_RATE_LIMIT_MS then
+        nk.logger_warn(string.format("%s is uploading crafts too fast", player_name))
+        return
+    end
+    craft_rate_limits[user_id] = now
+    
+    -- Create craft key (player_crafttype_craftname)
+    local craft_key = string.format("%s_%s_%s", player_name, data.craft_type, data.craft_name)
+    
+    -- Save craft to storage
+    local success, err = pcall(function()
+        nk.storage_write({
+            {
+                collection = "crafts",
+                key = craft_key,
+                user_id = user_id,
+                value = {
+                    craft_name = data.craft_name,
+                    craft_type = data.craft_type,
+                    folder_name = player_name,
+                    craft_data = data.craft_data,
+                    num_bytes = #data.craft_data,
+                    uploaded_at = now
+                },
+                permission_read = 2,
+                permission_write = 1
+            }
+        })
+    end)
+    
+    if success then
+        -- Notify all players of new craft
+        local notification = json.encode({ folder_name = player_name })
+        dispatcher.broadcast_message(OP_CRAFT_NOTIFICATION, notification, nil, sender)
+        nk.logger_info(string.format("Craft %s uploaded by %s", data.craft_name, player_name))
+    else
+        nk.logger_error(string.format("Failed to save craft: %s", err))
+    end
+end
+
+function download_craft(state, sender, data, dispatcher)
+    if not data or not data.folder_name or not data.craft_type or not data.craft_name then
+        return
+    end
+    
+    local craft_key = string.format("%s_%s_%s", data.folder_name, data.craft_type, data.craft_name)
+    
+    -- Read craft from storage
+    local success, result = pcall(function()
+        return nk.storage_list(nil, "crafts", 1000, nil)
+    end)
+    
+    if success and result then
+        for _, obj in ipairs(result) do
+            if obj.key == craft_key then
+                local response = json.encode({ craft = obj.value })
+                dispatcher.broadcast_message(OP_CRAFT_DOWNLOAD_RESPONSE, response, { sender })
+                return
+            end
+        end
+    end
+end
+
+function list_craft_folders(state, sender, dispatcher)
+    local folders = {}
+    local seen = {}
+    
+    -- List all crafts from storage
+    local success, result = pcall(function()
+        return nk.storage_list(nil, "crafts", 1000, nil)
+    end)
+    
+    if success and result then
+        for _, obj in ipairs(result) do
+            local folder = obj.value.folder_name
+            if folder and not seen[folder] then
+                seen[folder] = true
+                table.insert(folders, folder)
+            end
+        end
+    end
+    
+    local response = json.encode({ folders = folders, num_folders = #folders })
+    dispatcher.broadcast_message(OP_CRAFT_LIST_FOLDERS, response, { sender })
+end
+
+function list_crafts(state, sender, data, dispatcher)
+    if not data or not data.folder_name then
+        return
+    end
+    
+    local crafts = {}
+    
+    -- List crafts from storage for specific folder
+    local success, result = pcall(function()
+        return nk.storage_list(nil, "crafts", 1000, nil)
+    end)
+    
+    if success and result then
+        for _, obj in ipairs(result) do
+            if obj.value.folder_name == data.folder_name then
+                table.insert(crafts, {
+                    craft_name = obj.value.craft_name,
+                    craft_type = obj.value.craft_type,
+                    folder_name = obj.value.folder_name
+                })
+            end
+        end
+    end
+    
+    local response = json.encode({
+        folder_name = data.folder_name,
+        crafts = crafts,
+        num_crafts = #crafts
+    })
+    dispatcher.broadcast_message(OP_CRAFT_LIST_CRAFTS, response, { sender })
+end
+
+function delete_craft(state, sender, data, dispatcher)
+    if not data or not data.folder_name or not data.craft_type or not data.craft_name then
+        return
+    end
+    
+    local user_id = sender.user_id
+    local player = state.players[sender.session_id]
+    if not player then return end
+    local player_name = player.username
+    
+    -- Can only delete own crafts
+    if data.folder_name ~= player_name then
+        nk.logger_warn(string.format("%s tried to delete craft from %s's folder", 
+            player_name, data.folder_name))
+        return
+    end
+    
+    local craft_key = string.format("%s_%s_%s", data.folder_name, data.craft_type, data.craft_name)
+    
+    -- Delete craft from storage
+    local success, err = pcall(function()
+        nk.storage_delete({
+            { collection = "crafts", key = craft_key, user_id = user_id }
+        })
+    end)
+    
+    if success then
+        -- Notify all players of deletion
+        local notification = json.encode({
+            folder_name = data.folder_name,
+            craft_name = data.craft_name,
+            craft_type = data.craft_type
+        })
+        dispatcher.broadcast_message(OP_CRAFT_DELETE, notification)
+        nk.logger_info(string.format("Craft %s deleted by %s", data.craft_name, player_name))
+    end
+end
+
+--------------------------------------------------------------------------------
+-- Phase 4: Screenshot System
+--------------------------------------------------------------------------------
+
+local screenshot_rate_limits = {}
+local SCREENSHOT_RATE_LIMIT_MS = 15000 -- 15 seconds between uploads
+
+function handle_screenshot(context, dispatcher, state, sender, op_code, data)
+    if op_code == OP_SCREENSHOT_UPLOAD then
+        upload_screenshot(state, sender, data, dispatcher)
+    elseif op_code == OP_SCREENSHOT_DOWNLOAD_REQUEST then
+        download_screenshot(state, sender, data, dispatcher)
+    elseif op_code == OP_SCREENSHOT_LIST_FOLDERS then
+        list_screenshot_folders(state, sender, dispatcher)
+    elseif op_code == OP_SCREENSHOT_LIST then
+        list_screenshots(state, sender, data, dispatcher)
+    end
+end
+
+function upload_screenshot(state, sender, data, dispatcher)
+    if not data or not data.image_data then
+        return
+    end
+    
+    local user_id = sender.user_id
+    local player = state.players[sender.session_id]
+    if not player then return end
+    local player_name = player.username
+    
+    -- Rate limiting
+    local now = get_time_ms()
+    if screenshot_rate_limits[user_id] and now - screenshot_rate_limits[user_id] < SCREENSHOT_RATE_LIMIT_MS then
+        nk.logger_warn(string.format("%s is uploading screenshots too fast", player_name))
+        return
+    end
+    screenshot_rate_limits[user_id] = now
+    
+    -- Use date_taken or current time
+    local date_taken = data.date_taken or now
+    local screenshot_key = string.format("%s_%d", player_name, date_taken)
+    
+    -- Save screenshot to storage
+    local success, err = pcall(function()
+        nk.storage_write({
+            {
+                collection = "screenshots",
+                key = screenshot_key,
+                user_id = user_id,
+                value = {
+                    folder_name = player_name,
+                    date_taken = date_taken,
+                    image_data = data.image_data,
+                    miniature_data = data.miniature_data or "",
+                    width = data.width or 0,
+                    height = data.height or 0,
+                    num_bytes = #data.image_data
+                },
+                permission_read = 2,
+                permission_write = 1
+            }
+        })
+    end)
+    
+    if success then
+        -- Notify all players of new screenshot
+        local notification = json.encode({ folder_name = player_name })
+        dispatcher.broadcast_message(OP_SCREENSHOT_NOTIFICATION, notification, nil, sender)
+        nk.logger_info(string.format("Screenshot uploaded by %s", player_name))
+    else
+        nk.logger_error(string.format("Failed to save screenshot: %s", err))
+    end
+end
+
+function download_screenshot(state, sender, data, dispatcher)
+    if not data or not data.folder_name or not data.date_taken then
+        return
+    end
+    
+    local screenshot_key = string.format("%s_%d", data.folder_name, data.date_taken)
+    
+    -- Read screenshot from storage
+    local success, result = pcall(function()
+        return nk.storage_list(nil, "screenshots", 1000, nil)
+    end)
+    
+    if success and result then
+        for _, obj in ipairs(result) do
+            if obj.key == screenshot_key then
+                local response = json.encode({ screenshot = obj.value })
+                dispatcher.broadcast_message(OP_SCREENSHOT_DOWNLOAD_RESPONSE, response, { sender })
+                return
+            end
+        end
+    end
+end
+
+function list_screenshot_folders(state, sender, dispatcher)
+    local folders = {}
+    local seen = {}
+    
+    -- List all screenshots from storage
+    local success, result = pcall(function()
+        return nk.storage_list(nil, "screenshots", 1000, nil)
+    end)
+    
+    if success and result then
+        for _, obj in ipairs(result) do
+            local folder = obj.value.folder_name
+            if folder and not seen[folder] then
+                seen[folder] = true
+                table.insert(folders, folder)
+            end
+        end
+    end
+    
+    local response = json.encode({ folders = folders, num_folders = #folders })
+    dispatcher.broadcast_message(OP_SCREENSHOT_LIST_FOLDERS, response, { sender })
+end
+
+function list_screenshots(state, sender, data, dispatcher)
+    if not data or not data.folder_name then
+        return
+    end
+    
+    local screenshots = {}
+    local already_owned = {}
+    
+    -- Build lookup for already owned screenshots
+    for _, id in ipairs(data.already_owned_ids or {}) do
+        already_owned[id] = true
+    end
+    
+    -- List screenshots from storage for specific folder
+    local success, result = pcall(function()
+        return nk.storage_list(nil, "screenshots", 1000, nil)
+    end)
+    
+    if success and result then
+        for _, obj in ipairs(result) do
+            if obj.value.folder_name == data.folder_name and 
+               not already_owned[obj.value.date_taken] then
+                table.insert(screenshots, {
+                    date_taken = obj.value.date_taken,
+                    miniature_data = obj.value.miniature_data,
+                    width = obj.value.width,
+                    height = obj.value.height,
+                    folder_name = obj.value.folder_name
+                })
+            end
+        end
+    end
+    
+    local response = json.encode({
+        folder_name = data.folder_name,
+        screenshots = screenshots,
+        num_screenshots = #screenshots
+    })
+    dispatcher.broadcast_message(OP_SCREENSHOT_LIST, response, { sender })
+end
+
+--------------------------------------------------------------------------------
+-- Phase 4: Flag System
+--------------------------------------------------------------------------------
+
+local VALID_FLAG_PATTERN = "^[-_a-zA-Z0-9/]+$"
+
+function handle_flag(context, dispatcher, state, sender, op_code, data)
+    if op_code == OP_FLAG_UPLOAD then
+        upload_flag(state, sender, data, dispatcher)
+    elseif op_code == OP_FLAG_LIST_REQUEST then
+        list_flags(state, sender, dispatcher)
+    end
+end
+
+function upload_flag(state, sender, data, dispatcher)
+    if not data or not data.flag_name or not data.flag_data then
+        return
+    end
+    
+    local user_id = sender.user_id
+    local player = state.players[sender.session_id]
+    if not player then return end
+    local player_name = player.username
+    
+    -- Validate flag name (alphanumeric, dash, underscore, slash only)
+    if not string.match(data.flag_name, VALID_FLAG_PATTERN) then
+        nk.logger_warn(string.format("Invalid flag name from %s: %s", 
+            player_name, data.flag_name))
+        return
+    end
+    
+    -- Create flag key (escape slashes)
+    local flag_key = string.format("%s_%s", player_name, string.gsub(data.flag_name, "/", "$"))
+    
+    -- Save flag to storage
+    local success, err = pcall(function()
+        nk.storage_write({
+            {
+                collection = "flags",
+                key = flag_key,
+                user_id = user_id,
+                value = {
+                    flag_name = data.flag_name,
+                    owner = player_name,
+                    flag_data = data.flag_data,
+                    num_bytes = #data.flag_data
+                },
+                permission_read = 2,
+                permission_write = 1
+            }
+        })
+    end)
+    
+    if success then
+        -- Broadcast flag to all players
+        local msg = json.encode({
+            flag_name = data.flag_name,
+            owner = player_name,
+            flag_data = data.flag_data,
+            num_bytes = #data.flag_data
+        })
+        dispatcher.broadcast_message(OP_FLAG_UPLOAD, msg)
+        nk.logger_info(string.format("Flag %s uploaded by %s", data.flag_name, player_name))
+    else
+        nk.logger_error(string.format("Failed to save flag: %s", err))
+    end
+end
+
+function list_flags(state, sender, dispatcher)
+    local flags = {}
+    local seen = {}
+    
+    -- List all flags from storage
+    local success, result = pcall(function()
+        return nk.storage_list(nil, "flags", 1000, nil)
+    end)
+    
+    if success and result then
+        for _, obj in ipairs(result) do
+            local flag_name = obj.value.flag_name
+            local owner = obj.value.owner
+            -- Use flag_name + owner for proper uniqueness (different players can have same flag name)
+            local unique_key = string.format("%s_%s", flag_name or "", owner or "")
+            if flag_name and not seen[unique_key] then
+                seen[unique_key] = true
+                table.insert(flags, {
+                    flag_name = obj.value.flag_name,
+                    owner = obj.value.owner,
+                    flag_data = obj.value.flag_data,
+                    num_bytes = obj.value.num_bytes
+                })
+            end
+        end
+    end
+    
+    local response = json.encode({ flags = flags, flag_count = #flags })
+    dispatcher.broadcast_message(OP_FLAG_LIST_RESPONSE, response, { sender })
+end
+
+--------------------------------------------------------------------------------
 -- Helper Functions
 --------------------------------------------------------------------------------
+
+-- Get current time in milliseconds (for rate limiting)
+function get_time_ms()
+    local success, time_result = pcall(function() return nk.time() / 1000000 end) -- Convert ns to ms
+    if success then
+        return time_result
+    else
+        return os.time() * 1000 -- Fallback to seconds * 1000
+    end
+end
 
 function get_player_list(state)
     local players = {}

@@ -605,38 +605,42 @@ See `nakama/data/modules/lmp_match.lua` for the implementation.
 
 ### Phase 4 Tasks
 
-- [ ] **GroupSystem Migration**
-  - [ ] Add group op codes to lmp_match.lua
-  - [ ] Implement group handlers
-  - [ ] Add persistence to Nakama storage
-  - [ ] Create client adapter
+- [x] **GroupSystem Migration** ✅
+  - [x] Add group op codes to lmp_match.lua
+  - [x] Implement group handlers (create, remove, update, list)
+  - [x] Add persistence to Nakama storage
+  - [ ] Create client adapter (future work)
 
-- [ ] **CraftLibrarySystem Migration**
-  - [ ] Add craft library op codes
-  - [ ] Implement craft handlers
-  - [ ] Implement rate limiting
-  - [ ] Create client adapter
+- [x] **CraftLibrarySystem Migration** ✅
+  - [x] Add craft library op codes
+  - [x] Implement craft handlers (upload, download, list folders, list crafts, delete)
+  - [x] Implement rate limiting (5 second minimum interval)
+  - [ ] Create client adapter (future work)
 
-- [ ] **ScreenshotSystem Migration**
-  - [ ] Add screenshot op codes
-  - [ ] Implement screenshot handlers
-  - [ ] Create client adapter
+- [x] **ScreenshotSystem Migration** ✅
+  - [x] Add screenshot op codes
+  - [x] Implement screenshot handlers (upload, download, list folders, list screenshots)
+  - [x] Implement rate limiting (15 second minimum interval)
+  - [ ] Create client adapter (future work)
 
-- [ ] **FlagSystem Migration**
-  - [ ] Add flag op codes
-  - [ ] Implement flag handlers
-  - [ ] Create client adapter
+- [x] **FlagSystem Migration** ✅
+  - [x] Add flag op codes
+  - [x] Implement flag handlers (upload, list)
+  - [x] Flag name validation (alphanumeric pattern)
+  - [ ] Create client adapter (future work)
 
-- [ ] **Testing**
+- [ ] **Testing** (future work)
   - [ ] Unit tests for each system
   - [ ] Integration tests
 
-### Timeline
+### Server-Side Implementation Complete
 
-**Week 1**: GroupSystem  
-**Week 2**: CraftLibrarySystem  
-**Week 3**: ScreenshotSystem  
-**Week 4**: FlagSystem + Integration Testing
+All server-side handlers for Phase 4 are implemented in `nakama/data/modules/lmp_match.lua`:
+
+- **Lines 1304-1476**: GroupSystem handlers
+- **Lines 1478-1632**: CraftLibrarySystem handlers  
+- **Lines 1634-1792**: ScreenshotSystem handlers
+- **Lines 1794-1886**: FlagSystem handlers
 
 ---
 
