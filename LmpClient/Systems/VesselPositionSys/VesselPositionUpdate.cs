@@ -195,6 +195,13 @@ namespace LmpClient.Systems.VesselPositionSys
 
         private void InitializeOrbits()
         {
+            // Validate that both bodies exist before initializing orbits
+            if (Body == null || Target?.Body == null)
+            {
+                LunaLog.LogWarning($"[LMP]: Cannot initialize orbits for vessel {VesselId} - Body or Target.Body is null");
+                return;
+            }
+
             var lanFixFactor = GetLanFixFactor(GameTimeStamp, SubspaceId, Vessel, Body);
             KspOrbit.SetOrbit(Orbit[0], Orbit[1], Orbit[2], Orbit[3] + lanFixFactor, Orbit[4], Orbit[5], CalculateEpochTime(Orbit[6]), Body);
 
