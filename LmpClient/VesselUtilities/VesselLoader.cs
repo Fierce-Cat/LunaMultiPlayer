@@ -172,7 +172,7 @@ namespace LmpClient.VesselUtilities
             {
                 return vessel?.GetCrewCount() ?? 0;
             }
-            catch
+            catch (NullReferenceException)
             {
                 return 0;
             }
@@ -187,7 +187,7 @@ namespace LmpClient.VesselUtilities
             {
                 return protoVessel?.GetVesselCrew()?.Count ?? 0;
             }
-            catch
+            catch (NullReferenceException)
             {
                 return 0;
             }
