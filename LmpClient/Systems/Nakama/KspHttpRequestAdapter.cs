@@ -58,10 +58,15 @@ namespace LmpClient.Systems.Nakama
 
                 if (ShouldSendBody(request.Method, body))
                 {
+                    request.ContentLength = body.Length;
                     using (var requestStream = await GetRequestStreamAsync(request).ConfigureAwait(false))
                     {
                         await requestStream.WriteAsync(body, 0, body.Length, linkedCts.Token).ConfigureAwait(false);
                     }
+                }
+                else
+                {
+                    request.ContentLength = 0;
                 }
 
                 using (var response = (HttpWebResponse)await GetResponseAsync(request).ConfigureAwait(false))
