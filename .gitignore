@@ -30,3 +30,4 @@ Server/*.csproj.user
 LmpGlobal/*.csproj.user
 
 Server/packages
+Build/
