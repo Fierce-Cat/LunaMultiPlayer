@@ -418,6 +418,7 @@ namespace LmpClient.Network.Adapters
                 
                 // Check if this is a social feature message (OpCodes 80-112)
                 // These are sent as JSON strings, not binary LMP messages
+                // CraftLibrary relies on the 90-96 range to flow through this path.
                 if (matchState.OpCode >= 80 && matchState.OpCode <= 112)
                 {
                     var json = System.Text.Encoding.UTF8.GetString(matchState.State);
