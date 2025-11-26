@@ -7,7 +7,6 @@
 -- Reference: Documentation/NakamaIntegration/SocialFeatures.md
 
 local nk = require("nakama")
-local json = require("json")
 
 local M = {}
 
@@ -115,7 +114,7 @@ function M.match_init(context, setupstate)
     end
     
     local tick_rate = setupstate.tick_rate or DEFAULT_TICK_RATE
-    local label = json.encode({
+    local label = nk.json_encode({
         name = state.server_name,
         mode = state.game_mode,
         players = 0,
@@ -159,8 +158,8 @@ function M.match_join_attempt(context, dispatcher, tick, state, presence, metada
     -- NOTE: Full implementation requires storage lookup for banned users
     -- This is a placeholder for Phase 3 completion
     if metadata and metadata.mod_list then
-        nk.logger_debug(string.format("Player %s mods: %s", 
-            presence.username, json.encode(metadata.mod_list)))
+        nk.logger_debug(string.format("Player %s mods: %s",
+            presence.username, nk.json_encode(metadata.mod_list)))
         -- TODO: Implement mod compatibility validation against server mod list
     end
     
@@ -185,11 +184,11 @@ function M.match_join(context, dispatcher, tick, state, presences)
             subspace_id = state.subspace_id,
         }
         
-        nk.logger_info(string.format("Player joined: %s (session: %s)", 
+        nk.logger_info(string.format("Player joined: %s (session: %s)",
             presence.username, presence.session_id))
         
         -- Broadcast player join to existing players
-        local join_msg = json.encode({
+        local join_msg = nk.json_encode({
             type = "player_join",
             user_id = presence.user_id,
             username = presence.username,
@@ -198,7 +197,7 @@ function M.match_join(context, dispatcher, tick, state, presences)
         dispatcher.broadcast_message(OP_PLAYER_STATUS, join_msg, nil, presence)
         
         -- Send current server state to new player
-        local state_msg = json.encode({
+        local state_msg = nk.json_encode({
             type = "server_state",
             server_name = state.server_name,
             game_mode = state.game_mode,
@@ -211,7 +210,7 @@ function M.match_join(context, dispatcher, tick, state, presences)
         
         -- Send existing vessels to new player
         for vessel_id, vessel in pairs(state.vessels) do
-            local vessel_msg = json.encode({
+            local vessel_msg = nk.json_encode({
                 type = "vessel_sync",
                 vessel = vessel,
             })
@@ -258,7 +257,7 @@ end
 
 -- Broadcast current state to all players (periodic sync)
 function broadcast_state_sync(dispatcher, state)
-    local sync_msg = json.encode({
+    local sync_msg = nk.json_encode({
         type = "state_sync",
         universe_time = state.universe_time,
         player_count = table_length(state.players),
@@ -304,7 +303,7 @@ function M.match_leave(context, dispatcher, tick, state, presences)
             release_player_locks(state, presence.session_id)
             
             -- Broadcast player leave to remaining players
-            local leave_msg = json.encode({
+            local leave_msg = nk.json_encode({
                 type = "player_leave",
                 user_id = presence.user_id,
                 username = presence.username,
@@ -333,7 +332,7 @@ function M.match_terminate(context, dispatcher, tick, state, grace_seconds)
     -- TODO: Implement persistence using Nakama storage
     
     -- Notify all players of shutdown
-    local shutdown_msg = json.encode({
+    local shutdown_msg = nk.json_encode({
         type = "server_shutdown",
         grace_seconds = grace_seconds,
         reason = "Server shutting down",
@@ -354,11 +353,11 @@ function process_message(context, dispatcher, state, message)
     -- Parse JSON data if present
     local parsed_data = nil
     if data and #data > 0 then
-        local success, result = pcall(json.decode, data)
+        local success, result = pcall(nk.json_decode, data)
         if success then
             parsed_data = result
         else
-            nk.logger_warn(string.format("Failed to parse message data from %s", 
+            nk.logger_warn(string.format("Failed to parse message data from %s",
                 sender.username))
             return
         end
@@ -463,8 +462,8 @@ function handle_chat(context, dispatcher, state, sender, data)
     if #message == 0 then
         return
     end
-    
-    local chat_msg = json.encode({
+
+    local chat_msg = nk.json_encode({
         type = "chat",
         sender = sender.username,
         message = message,
@@ -484,7 +483,7 @@ function handle_player_status(context, dispatcher, state, sender, data)
     end
     
     -- Broadcast status update
-    local status_msg = json.encode({
+    local status_msg = nk.json_encode({
         type = "player_status_update",
         session_id = sender.session_id,
         username = sender.username,
@@ -502,7 +501,7 @@ function handle_player_color(context, dispatcher, state, sender, data)
     end
     
     -- Broadcast color update
-    local color_msg = json.encode({
+    local color_msg = nk.json_encode({
         type = "player_color_update",
         session_id = sender.session_id,
         color = player.color,
@@ -531,7 +530,7 @@ function handle_vessel(context, dispatcher, state, sender, data)
     }
     
     -- Broadcast to other players
-    dispatcher.broadcast_message(OP_VESSEL, json.encode(data), nil, sender)
+    dispatcher.broadcast_message(OP_VESSEL, nk.json_encode(data), nil, sender)
 end
 
 --------------------------------------------------------------------------------
@@ -660,7 +659,7 @@ function handle_vessel_update(context, dispatcher, state, sender, data)
     vessel.last_update_by = sender.session_id
     
     -- Broadcast to other players
-    dispatcher.broadcast_message(OP_VESSEL_UPDATE, json.encode(data), nil, sender)
+    dispatcher.broadcast_message(OP_VESSEL_UPDATE, nk.json_encode(data), nil, sender)
 end
 
 function handle_vessel_remove(context, dispatcher, state, sender, data)
@@ -698,7 +697,7 @@ function handle_vessel_remove(context, dispatcher, state, sender, data)
     state.vessels[vessel_id] = nil
     
     -- Broadcast removal
-    local remove_msg = json.encode({
+    local remove_msg = nk.json_encode({
         vessel_id = vessel_id,
         removed_by = sender.session_id,
     })
@@ -753,7 +752,7 @@ function handle_warp(context, dispatcher, state, sender, data)
         end
         
         -- Broadcast warp change
-        local warp_msg = json.encode({
+        local warp_msg = nk.json_encode({
             type = "warp_change",
             session_id = sender.session_id,
             subspace_id = player.subspace_id,
@@ -777,7 +776,7 @@ function handle_warp(context, dispatcher, state, sender, data)
         -- Update global warp rate if changed
         if min_rate ~= state.current_warp_rate then
             state.current_warp_rate = min_rate
-            local warp_msg = json.encode({
+            local warp_msg = nk.json_encode({
                 type = "warp_sync",
                 warp_rate = min_rate,
                 controller = find_slowest_player(state),
@@ -788,7 +787,7 @@ function handle_warp(context, dispatcher, state, sender, data)
     elseif state.warp_mode == "admin" then
         -- Admin mode: Only admins can change warp
         if not is_admin(state, sender.session_id) then
-            local deny_msg = json.encode({
+            local deny_msg = nk.json_encode({
                 type = "warp_denied",
                 reason = "Only admins can control warp in admin mode",
             })
@@ -797,7 +796,7 @@ function handle_warp(context, dispatcher, state, sender, data)
         end
         
         state.admin_warp_factor = requested_rate
-        local warp_msg = json.encode({
+        local warp_msg = nk.json_encode({
             type = "warp_sync",
             warp_rate = requested_rate,
             controller = sender.session_id,
@@ -835,7 +834,7 @@ function handle_lock(context, dispatcher, state, sender, data)
         -- Check if lock is available
         if state.locks[lock_key] then
             -- Lock already held
-            local response = json.encode({
+            local response = nk.json_encode({
                 type = "lock_response",
                 lock_type = data.lock_type,
                 lock_id = data.lock_id,
@@ -850,7 +849,7 @@ function handle_lock(context, dispatcher, state, sender, data)
                 acquired_at = os.time(),
             }
             
-            local response = json.encode({
+            local response = nk.json_encode({
                 type = "lock_response",
                 lock_type = data.lock_type,
                 lock_id = data.lock_id,
@@ -865,7 +864,7 @@ function handle_lock(context, dispatcher, state, sender, data)
         if lock and lock.holder == sender.session_id then
             state.locks[lock_key] = nil
             
-            local response = json.encode({
+            local response = nk.json_encode({
                 type = "lock_released",
                 lock_type = data.lock_type,
                 lock_id = data.lock_id,
@@ -897,7 +896,7 @@ function handle_kerbal(context, dispatcher, state, sender, data)
     }
     
     -- Broadcast kerbal update
-    dispatcher.broadcast_message(OP_KERBAL, json.encode(state.kerbals[kerbal_id]), nil, sender)
+    dispatcher.broadcast_message(OP_KERBAL, nk.json_encode(state.kerbals[kerbal_id]), nil, sender)
 end
 
 --------------------------------------------------------------------------------
@@ -919,7 +918,7 @@ function handle_scenario(context, dispatcher, state, sender, data)
         end
         
         -- Broadcast science update
-        local science_msg = json.encode({
+        local science_msg = nk.json_encode({
             scenario_type = "science",
             science = state.science,
             updated_by = sender.session_id,
@@ -933,7 +932,7 @@ function handle_scenario(context, dispatcher, state, sender, data)
             if state.funds < 0 then state.funds = 0 end
         end
         
-        local funds_msg = json.encode({
+        local funds_msg = nk.json_encode({
             scenario_type = "funds",
             funds = state.funds,
             updated_by = sender.session_id,
@@ -948,7 +947,7 @@ function handle_scenario(context, dispatcher, state, sender, data)
             state.reputation = math.max(-1000, math.min(1000, state.reputation))
         end
         
-        local rep_msg = json.encode({
+        local rep_msg = nk.json_encode({
             scenario_type = "reputation",
             reputation = state.reputation,
             updated_by = sender.session_id,
@@ -965,7 +964,7 @@ function handle_scenario(context, dispatcher, state, sender, data)
                 unlocked_at = os.time(),
             }
             
-            local tech_msg = json.encode({
+            local tech_msg = nk.json_encode({
                 scenario_type = "tech_unlock",
                 tech_id = data.tech_id,
                 unlocked_by = sender.session_id,
@@ -984,7 +983,7 @@ function handle_scenario(context, dispatcher, state, sender, data)
                 updated_at = os.time(),
             }
             
-            dispatcher.broadcast_message(OP_SCENARIO, json.encode(data), nil, sender)
+            dispatcher.broadcast_message(OP_SCENARIO, nk.json_encode(data), nil, sender)
         end
         
     elseif scenario_type == "facility" then
@@ -997,11 +996,11 @@ function handle_scenario(context, dispatcher, state, sender, data)
                 upgraded_at = os.time(),
             }
             
-            dispatcher.broadcast_message(OP_SCENARIO, json.encode(data), nil, sender)
+            dispatcher.broadcast_message(OP_SCENARIO, nk.json_encode(data), nil, sender)
         end
     else
         -- Unknown scenario type, just broadcast
-        dispatcher.broadcast_message(OP_SCENARIO, json.encode(data), nil, sender)
+        dispatcher.broadcast_message(OP_SCENARIO, nk.json_encode(data), nil, sender)
     end
 end
 
@@ -1015,7 +1014,7 @@ function handle_mod_data(context, dispatcher, state, sender, data)
     
     -- Broadcast to all other players (exclude sender)
     -- The data payload is passed through as-is
-    dispatcher.broadcast_message(OP_MOD_DATA, json.encode(data), nil, sender)
+    dispatcher.broadcast_message(OP_MOD_DATA, nk.json_encode(data), nil, sender)
 end
 
 function handle_admin_command(context, dispatcher, state, sender, data)
@@ -1048,7 +1047,7 @@ function handle_admin_command(context, dispatcher, state, sender, data)
             removed_count = removed_count + 1
             
             -- Broadcast removal
-            local remove_msg = json.encode({
+            local remove_msg = nk.json_encode({
                 vessel_id = vessel_id,
                 removed_by = sender.session_id,
             })
@@ -1072,7 +1071,7 @@ function handle_admin_command(context, dispatcher, state, sender, data)
             removed_count = removed_count + 1
             
             -- Broadcast removal
-            local remove_msg = json.encode({
+            local remove_msg = nk.json_encode({
                 vessel_id = vessel_id,
                 removed_by = sender.session_id,
             })
@@ -1101,7 +1100,7 @@ function handle_admin(context, dispatcher, state, sender, data)
         nk.logger_warn(string.format("Unauthorized admin command from %s: %s", 
             sender.username, data.action))
         
-        local deny_msg = json.encode({
+        local deny_msg = nk.json_encode({
             type = "admin_denied",
             reason = "You are not an admin",
         })
@@ -1120,7 +1119,7 @@ function handle_admin(context, dispatcher, state, sender, data)
                 sender.username, target.username))
             
             -- Notify the kicked player
-            local kick_msg = json.encode({
+            local kick_msg = nk.json_encode({
                 type = "kicked",
                 reason = data.reason or "Kicked by admin",
             })
@@ -1131,7 +1130,7 @@ function handle_admin(context, dispatcher, state, sender, data)
             release_player_locks(state, target_session)
             
             -- Notify others
-            local notify_msg = json.encode({
+            local notify_msg = nk.json_encode({
                 type = "player_kicked",
                 username = target.username,
                 by = sender.username,
@@ -1169,7 +1168,7 @@ function handle_admin(context, dispatcher, state, sender, data)
             -- If player is connected, kick them
             for session_id, player in pairs(state.players) do
                 if player.user_id == target_user_id then
-                    local ban_msg = json.encode({
+                    local ban_msg = nk.json_encode({
                         type = "banned",
                         reason = ban_record.reason,
                     })
@@ -1197,14 +1196,14 @@ function handle_admin(context, dispatcher, state, sender, data)
         if new_mode == "subspace" or new_mode == "mcu" or new_mode == "admin" then
             state.warp_mode = new_mode
             
-            local mode_msg = json.encode({
+            local mode_msg = nk.json_encode({
                 type = "settings_changed",
                 setting = "warp_mode",
                 value = new_mode,
                 by = sender.username,
             })
             dispatcher.broadcast_message(OP_SETTINGS, mode_msg)
-            nk.logger_info(string.format("Admin %s set warp mode to %s", 
+            nk.logger_info(string.format("Admin %s set warp mode to %s",
                 sender.username, new_mode))
         end
         
@@ -1214,7 +1213,7 @@ function handle_admin(context, dispatcher, state, sender, data)
         if new_mode == "sandbox" or new_mode == "science" or new_mode == "career" then
             state.game_mode = new_mode
             
-            local mode_msg = json.encode({
+            local mode_msg = nk.json_encode({
                 type = "settings_changed",
                 setting = "game_mode",
                 value = new_mode,
@@ -1222,7 +1221,7 @@ function handle_admin(context, dispatcher, state, sender, data)
             })
             dispatcher.broadcast_message(OP_SETTINGS, mode_msg)
             update_match_label(state, dispatcher)
-            nk.logger_info(string.format("Admin %s set game mode to %s", 
+            nk.logger_info(string.format("Admin %s set game mode to %s",
                 sender.username, new_mode))
         end
         
@@ -1232,13 +1231,13 @@ function handle_admin(context, dispatcher, state, sender, data)
         if target_session and state.players[target_session] then
             admin_users[target_session] = true
             
-            local grant_msg = json.encode({
+            local grant_msg = nk.json_encode({
                 type = "admin_granted",
                 session_id = target_session,
                 username = state.players[target_session].username,
             })
             dispatcher.broadcast_message(OP_ADMIN, grant_msg)
-            nk.logger_info(string.format("Admin %s granted admin to %s", 
+            nk.logger_info(string.format("Admin %s granted admin to %s",
                 sender.username, state.players[target_session].username))
         end
         
@@ -1248,7 +1247,7 @@ function handle_admin(context, dispatcher, state, sender, data)
         if target_session then
             admin_users[target_session] = nil
             
-            local revoke_msg = json.encode({
+            local revoke_msg = nk.json_encode({
                 type = "admin_revoked",
                 session_id = target_session,
             })
@@ -1259,7 +1258,7 @@ function handle_admin(context, dispatcher, state, sender, data)
         -- Force save server state
         save_match_state(state)
         
-        local save_msg = json.encode({
+        local save_msg = nk.json_encode({
             type = "state_saved",
             by = sender.username,
             at = os.time(),
@@ -1269,7 +1268,7 @@ function handle_admin(context, dispatcher, state, sender, data)
         
     elseif action == "announce" then
         -- Server announcement
-        local announcement = json.encode({
+        local announcement = nk.json_encode({
             type = "announcement",
             message = data.message or "",
             by = sender.username,
@@ -1432,7 +1431,7 @@ function create_group(state, sender, data, dispatcher)
     }
     
     -- Broadcast group creation to all players
-    local msg = json.encode({ group = state.groups[group_name] })
+    local msg = nk.json_encode({ group = state.groups[group_name] })
     dispatcher.broadcast_message(OP_GROUP_UPDATE, msg)
     
     -- Save groups to storage
@@ -1465,7 +1464,7 @@ function remove_group(state, sender, data, dispatcher)
     state.groups[group_name] = nil
     
     -- Broadcast group removal to all players
-    local msg = json.encode({ group_name = group_name })
+    local msg = nk.json_encode({ group_name = group_name })
     dispatcher.broadcast_message(OP_GROUP_REMOVE, msg)
     
     -- Save groups to storage
@@ -1517,7 +1516,7 @@ function update_group(state, sender, data, dispatcher)
     end
     
     -- Broadcast group update to all players
-    local msg = json.encode({ group = state.groups[group.name] })
+    local msg = nk.json_encode({ group = state.groups[group.name] })
     dispatcher.broadcast_message(OP_GROUP_UPDATE, msg)
     
     -- Save groups to storage
@@ -1525,7 +1524,7 @@ function update_group(state, sender, data, dispatcher)
 end
 
 function list_groups(state, sender, dispatcher)
-    local msg = json.encode({ groups = state.groups })
+    local msg = nk.json_encode({ groups = state.groups })
     dispatcher.broadcast_message(OP_GROUP_LIST, msg, { sender })
 end
 
@@ -1627,7 +1626,7 @@ function upload_craft(state, sender, data, dispatcher)
     
     if success then
         -- Notify all players of new craft
-        local notification = json.encode({ folder_name = player_name })
+        local notification = nk.json_encode({ folder_name = player_name })
         dispatcher.broadcast_message(OP_CRAFT_NOTIFICATION, notification, nil, sender)
         nk.logger_info(string.format("Craft %s uploaded by %s", data.craft_name, player_name))
     else
@@ -1650,7 +1649,7 @@ function download_craft(state, sender, data, dispatcher)
     if success and result then
         for _, obj in ipairs(result) do
             if obj.key == craft_key then
-                local response = json.encode({ craft = obj.value })
+                local response = nk.json_encode({ craft = obj.value })
                 dispatcher.broadcast_message(OP_CRAFT_DOWNLOAD_RESPONSE, response, { sender })
                 return
             end
@@ -1677,7 +1676,7 @@ function list_craft_folders(state, sender, dispatcher)
         end
     end
     
-    local response = json.encode({ folders = folders, num_folders = #folders })
+    local response = nk.json_encode({ folders = folders, num_folders = #folders })
     dispatcher.broadcast_message(OP_CRAFT_LIST_FOLDERS, response, { sender })
 end
 
@@ -1705,7 +1704,7 @@ function list_crafts(state, sender, data, dispatcher)
         end
     end
     
-    local response = json.encode({
+    local response = nk.json_encode({
         folder_name = data.folder_name,
         crafts = crafts,
         num_crafts = #crafts
@@ -1741,7 +1740,7 @@ function delete_craft(state, sender, data, dispatcher)
     
     if success then
         -- Notify all players of deletion
-        local notification = json.encode({
+        local notification = nk.json_encode({
             folder_name = data.folder_name,
             craft_name = data.craft_name,
             craft_type = data.craft_type
@@ -1816,7 +1815,7 @@ function upload_screenshot(state, sender, data, dispatcher)
     
     if success then
         -- Notify all players of new screenshot
-        local notification = json.encode({ folder_name = player_name })
+        local notification = nk.json_encode({ folder_name = player_name })
         dispatcher.broadcast_message(OP_SCREENSHOT_NOTIFICATION, notification, nil, sender)
         nk.logger_info(string.format("Screenshot uploaded by %s", player_name))
     else
@@ -1839,7 +1838,7 @@ function download_screenshot(state, sender, data, dispatcher)
     if success and result then
         for _, obj in ipairs(result) do
             if obj.key == screenshot_key then
-                local response = json.encode({ screenshot = obj.value })
+                local response = nk.json_encode({ screenshot = obj.value })
                 dispatcher.broadcast_message(OP_SCREENSHOT_DOWNLOAD_RESPONSE, response, { sender })
                 return
             end
@@ -1866,7 +1865,7 @@ function list_screenshot_folders(state, sender, dispatcher)
         end
     end
     
-    local response = json.encode({ folders = folders, num_folders = #folders })
+    local response = nk.json_encode({ folders = folders, num_folders = #folders })
     dispatcher.broadcast_message(OP_SCREENSHOT_LIST_FOLDERS, response, { sender })
 end
 
@@ -1903,7 +1902,7 @@ function list_screenshots(state, sender, data, dispatcher)
         end
     end
     
-    local response = json.encode({
+    local response = nk.json_encode({
         folder_name = data.folder_name,
         screenshots = screenshots,
         num_screenshots = #screenshots
@@ -1966,7 +1965,7 @@ function upload_flag(state, sender, data, dispatcher)
     
     if success then
         -- Broadcast flag to all players
-        local msg = json.encode({
+        local msg = nk.json_encode({
             flag_name = data.flag_name,
             owner = player_name,
             flag_data = data.flag_data,
@@ -2006,7 +2005,7 @@ function list_flags(state, sender, dispatcher)
         end
     end
     
-    local response = json.encode({ flags = flags, flag_count = #flags })
+    local response = nk.json_encode({ flags = flags, flag_count = #flags })
     dispatcher.broadcast_message(OP_FLAG_LIST_RESPONSE, response, { sender })
 end
 
@@ -2053,7 +2052,7 @@ end
 
 function update_match_label(state, dispatcher)
     local player_count = table_length(state.players)
-    local label = json.encode({
+    local label = nk.json_encode({
         name = state.server_name,
         mode = state.game_mode,
         players = player_count,
@@ -2075,7 +2074,7 @@ end
 -- Module Registration
 --------------------------------------------------------------------------------
 
--- Register match handler
-nk.register_match(M)
+-- Nakama automatically registers this match handler when the module is loaded
+-- No explicit registration call is needed
 
 return M

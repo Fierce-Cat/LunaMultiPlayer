@@ -2,6 +2,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
+using System.Reflection;
 using System.Text;
 
 namespace LmpClient.Utilities
@@ -80,7 +81,7 @@ namespace LmpClient.Utilities
 
                 foreach (var kvp in dict)
                 {
-                    var field = type.GetField(kvp.Key);
+                    var field = type.GetField(kvp.Key, BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase);
                     if (field != null)
                     {
                         var value = ConvertValue(kvp.Value, field.FieldType);
@@ -88,7 +89,7 @@ namespace LmpClient.Utilities
                         continue;
                     }
 
-                    var prop = type.GetProperty(kvp.Key);
+                    var prop = type.GetProperty(kvp.Key, BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase);
                     if (prop != null && prop.CanWrite)
                     {
                         var value = ConvertValue(kvp.Value, prop.PropertyType);
@@ -601,11 +602,46 @@ namespace LmpClient.Utilities
                 {
                     _builder.Append(Convert.ToDouble(value).ToString("R"));
                 }
-                else
+                else if (!TrySerializeComplexObject(value))
                 {
                     SerializeString(value.ToString());
                 }
             }
+            private bool TrySerializeComplexObject(object value)
+            {
+                if (value == null)
+                    return false;
+
+                if (value is string || value is DateTime)
+                    return false;
+
+                var type = value.GetType();
+                if (type.IsPrimitive || value is decimal)
+                    return false;
+
+                if (value is IList || value is IDictionary)
+                    return false;
+
+                var dict = new Dictionary<string, object>();
+
+                foreach (var field in type.GetFields(BindingFlags.Public | BindingFlags.Instance))
+                {
+                    dict[field.Name] = field.GetValue(value);
+                }
+
+                foreach (var prop in type.GetProperties(BindingFlags.Public | BindingFlags.Instance))
+                {
+                    if (prop.CanRead && prop.GetIndexParameters().Length == 0)
+                    {
+                        dict[prop.Name] = prop.GetValue(value, null);
+                    }
+                }
+
+                SerializeObject(dict);
+                return true;
+            }
+
+
 
             private void SerializeString(string str)
             {

@@ -32,6 +32,8 @@ namespace LmpClient.Systems.CraftLibrary
         public ConcurrentQueue<string> DownloadedCraftsNotification { get; } = new ConcurrentQueue<string>();
         public List<string> FoldersWithNewContent { get; } = new List<string>();
         public bool NewContent => FoldersWithNewContent.Any();
+        private NakamaNetworkConnection _nakamaConnection;
+
 
         #endregion
 
@@ -61,13 +63,13 @@ namespace LmpClient.Systems.CraftLibrary
         {
             if (opCode == 90) // Craft Library
             {
-                var nakamaCraft = LmpClient.Utilities.Json.Deserialize<NakamaCraft>(data);
+                var nakamaCraft = Json.Deserialize<NakamaCraft>(data);
                 var craftEntry = new CraftEntry
                 {
-                    FolderName = nakamaCraft.FolderName,
-                    CraftName = nakamaCraft.CraftName,
-                    CraftType = (CraftType)nakamaCraft.CraftType,
-                    CraftData = Convert.FromBase64String(nakamaCraft.CraftData)
+                    FolderName = nakamaCraft.folder_name,
+                    CraftName = nakamaCraft.craft_name,
+                    CraftType = (CraftType)nakamaCraft.craft_type,
+                    CraftData = Convert.FromBase64String(nakamaCraft.craft_data)
                 };
                 craftEntry.CraftNumBytes = craftEntry.CraftData.Length;
 
@@ -215,10 +217,10 @@ namespace LmpClient.Systems.CraftLibrary
                 {
                     var nakamaCraft = new NakamaCraft
                     {
-                        FolderName = craft.FolderName,
-                        CraftName = craft.CraftName,
-                        CraftType = (int)craft.CraftType,
-                        CraftData = Convert.ToBase64String(craft.CraftData)
+                        folder_name = craft.FolderName,
+                        craft_name = craft.CraftName,
+                        craft_type = (int)craft.CraftType,
+                        craft_data = Convert.ToBase64String(craft.CraftData)
                     };
                     TaskFactory.StartNew(() => nakamaConn.SendJsonAsync(90, nakamaCraft));
                 }

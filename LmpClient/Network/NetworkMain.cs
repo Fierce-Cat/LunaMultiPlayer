@@ -101,6 +101,9 @@ namespace LmpClient.Network
             SerializationClient = new NetClient(Config.Clone());
             
             // Use the factory to create the connection
+            // Check if we should use Nakama based on a setting or flag (placeholder for now)
+            // For testing the tunnel, we can manually switch this or add a setting later.
+            // ClientConnection = NetworkConnectionFactory.Create(NetworkConnectionFactory.NetworkBackend.Nakama);
             ClientConnection = NetworkConnectionFactory.Create(NetworkConnectionFactory.NetworkBackend.Lidgren);
         }
 
