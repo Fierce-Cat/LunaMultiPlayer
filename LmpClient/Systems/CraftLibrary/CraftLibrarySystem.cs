@@ -1,5 +1,8 @@
 ﻿using LmpClient.Base;
 using LmpClient.Localization;
+using LmpClient.Network;
+using LmpClient.Network.Adapters;
+using LmpClient.Systems.Nakama;
 using LmpClient.Systems.SettingsSys;
 using LmpClient.Utilities;
 using LmpCommon.Enums;
@@ -42,8 +45,55 @@ namespace LmpClient.Systems.CraftLibrary
         {
             base.OnEnabled();
             RefreshOwnCrafts();
-            MessageSender.SendRequestFoldersMsg();
+            if (NetworkMain.ClientConnection is NakamaNetworkConnection nakamaConn)
+            {
+                nakamaConn.NakamaMessageReceived += OnNakamaMessageReceived;
+                // Request folders/crafts from Nakama if needed, or rely on subscription
+            }
+            else
+            {
+                MessageSender.SendRequestFoldersMsg();
+            }
             SetupRoutine(new RoutineDefinition(1000, RoutineExecution.Update, NotifyDownloadedCrafts));
+        }
+
+        private void OnNakamaMessageReceived(int opCode, string data)
+        {
+            if (opCode == 90) // Craft Library
+            {
+                var nakamaCraft = LmpClient.Utilities.Json.Deserialize<NakamaCraft>(data);
+                var craftEntry = new CraftEntry
+                {
+                    FolderName = nakamaCraft.FolderName,
+                    CraftName = nakamaCraft.CraftName,
+                    CraftType = (CraftType)nakamaCraft.CraftType,
+                    CraftData = Convert.FromBase64String(nakamaCraft.CraftData)
+                };
+                craftEntry.CraftNumBytes = craftEntry.CraftData.Length;
+
+                if (!CraftDownloaded.ContainsKey(craftEntry.FolderName))
+                    CraftDownloaded.TryAdd(craftEntry.FolderName, new ConcurrentDictionary<string, CraftEntry>());
+
+                CraftDownloaded[craftEntry.FolderName].AddOrUpdate(craftEntry.CraftName, craftEntry, (key, existingVal) => craftEntry);
+                
+                // Also update basic info
+                if (!CraftInfo.ContainsKey(craftEntry.FolderName))
+                    CraftInfo.TryAdd(craftEntry.FolderName, new ConcurrentDictionary<string, CraftBasicEntry>());
+                
+                var basicEntry = new CraftBasicEntry
+                {
+                    FolderName = craftEntry.FolderName,
+                    CraftName = craftEntry.CraftName,
+                    CraftType = craftEntry.CraftType
+                };
+                CraftInfo[craftEntry.FolderName].AddOrUpdate(craftEntry.CraftName, basicEntry, (key, existingVal) => basicEntry);
+
+                if (craftEntry.FolderName != SettingsSystem.CurrentSettings.PlayerName)
+                {
+                    FoldersWithNewContent.Add(craftEntry.FolderName);
+                    DownloadedCraftsNotification.Enqueue(craftEntry.CraftName);
+                }
+            }
         }
 
         private void NotifyDownloadedCrafts()
@@ -57,6 +107,10 @@ namespace LmpClient.Systems.CraftLibrary
             base.OnDisabled();
             CraftInfo.Clear();
             CraftDownloaded.Clear();
+            if (NetworkMain.ClientConnection is NakamaNetworkConnection nakamaConn)
+            {
+                nakamaConn.NakamaMessageReceived -= OnNakamaMessageReceived;
+            }
         }
 
         #endregion
@@ -157,7 +211,21 @@ namespace LmpClient.Systems.CraftLibrary
         {
             if (TimeUtil.IsInInterval(ref _lastRequest, SettingsSystem.ServerSettings.MinCraftLibraryRequestIntervalMs))
             {
-                MessageSender.SendCraftMsg(craft);
+                if (NetworkMain.ClientConnection is NakamaNetworkConnection nakamaConn)
+                {
+                    var nakamaCraft = new NakamaCraft
+                    {
+                        FolderName = craft.FolderName,
+                        CraftName = craft.CraftName,
+                        CraftType = (int)craft.CraftType,
+                        CraftData = Convert.ToBase64String(craft.CraftData)
+                    };
+                    TaskFactory.StartNew(() => nakamaConn.SendJsonAsync(90, nakamaCraft));
+                }
+                else
+                {
+                    MessageSender.SendCraftMsg(craft);
+                }
                 LunaScreenMsg.PostScreenMessage(LocalizationContainer.ScreenText.CraftUploaded, 10f, ScreenMessageStyle.UPPER_CENTER);
             }
             else

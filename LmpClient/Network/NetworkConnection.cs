@@ -44,7 +44,7 @@ namespace LmpClient.Network
                     MainSystem.Singleton.Status = $"Disconnected: {reason}";
 
                     NetworkMain.ClientConnection.Disconnect(reason);
-                    NetworkMain.ClientConnection.Shutdown(reason);
+                    NetworkMain.ClientConnection.Shutdown();
                     NetworkMain.ResetConnectionStaticsAndQueues();
                 }
             }
@@ -90,38 +90,11 @@ namespace LmpClient.Network
                     {
                         var client = NetworkMain.ClientConnection;
 
-                        if (client.Status == NetPeerStatus.NotRunning)
-                        {
-                            LunaLog.Log("[LMP]: Starting client");
-                            client.Start();
-                        }
-
-                        while (client.Status != NetPeerStatus.Running)
-                        {
-                            // Still trying to start up
-                            Thread.Sleep(50);
-                        }
-
-                        var outMsg = client.CreateMessage(password.GetByteCount());
-                        outMsg.Write(password);
-
-                        var conn = client.Connect(endpoint, outMsg);
-                        if (conn == null)
-                        {
-                            // Lidgren says we're already connected, that's not possible
-                            LunaLog.LogError($"[LMP]: Invalid connection state, connected without connection");
-                            client.Disconnect("Invalid state");
-                            break;
-                        }
-                        client.FlushSendQueue();
-
-                        while (conn.Status == NetConnectionStatus.InitiatedConnect || conn.Status == NetConnectionStatus.None)
-                        {
-                            // Still trying to connect
-                            Thread.Sleep(50);
-                        }
-
-                        if (client.ConnectionStatus == NetConnectionStatus.Connected)
+                        client.Start();
+    
+                        var connected = client.ConnectAsync(new[] { endpoint }, password).Result;
+    
+                        if (connected)
                         {
                             LunaLog.Log($"[LMP]: Connected to {endpoint.Address}:{endpoint.Port}");
                             MainSystem.NetworkState = ClientState.Connected;

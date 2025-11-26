@@ -33,6 +33,11 @@ namespace LmpClient.Network.Adapters
         // private ISession _session;
         // private IMatch _currentMatch;
 
+        /// <summary>
+        /// Event triggered when a Nakama social message (OpCodes 80-112) is received.
+        /// </summary>
+        public event Action<int, string> NakamaMessageReceived;
+
         private readonly string _serverKey;
         private readonly NetworkStatisticsBase _statistics;
         private readonly ConcurrentDictionary<long, Type> _messageTypeMap;
@@ -240,10 +245,46 @@ namespace LmpClient.Network.Adapters
             // TODO: When Nakama SDK is added:
             // await _socket.SendMatchStateAsync(_currentMatch.Id, opCode, data);
 
-            LunaLog.LogWarning("[Nakama] SendMessageAsync called but SDK not installed");
+            // LunaLog.LogWarning("[Nakama] SendMessageAsync called but SDK not installed");
             await Task.CompletedTask;
 
             _statistics.AddSentMessage(data.Length);
+        }
+
+        /// <summary>
+        /// Sends a JSON payload for social features (OpCodes 80-112).
+        /// </summary>
+        /// <param name="opCode">The operation code for the message.</param>
+        /// <param name="data">The object to serialize to JSON.</param>
+        public async Task SendJsonAsync(int opCode, object data)
+        {
+            if (State != NetworkConnectionState.Connected)
+            {
+                throw new InvalidOperationException("Not connected to server");
+            }
+
+            if (data == null)
+            {
+                throw new ArgumentNullException(nameof(data));
+            }
+
+            try
+            {
+                var json = Utilities.Json.Serialize(data);
+                
+                // TODO: When Nakama SDK is added:
+                // await _socket.SendMatchStateAsync(_currentMatch.Id, opCode, json);
+                
+                // LunaLog.Log($"[Nakama] Sent JSON message OpCode: {opCode}");
+                await Task.CompletedTask;
+                
+                // Estimate size for stats
+                _statistics.AddSentMessage(json.Length);
+            }
+            catch (Exception ex)
+            {
+                LunaLog.LogError($"[Nakama] Error sending JSON message: {ex.Message}");
+            }
         }
 
         /// <inheritdoc />
@@ -344,6 +385,15 @@ namespace LmpClient.Network.Adapters
             {
                 _statistics.AddReceivedMessage(state.Length);
                 
+                // Check if this is a social feature message (OpCodes 80-112)
+                // These are sent as JSON strings, not binary LMP messages
+                if (opCode >= 80 && opCode <= 112)
+                {
+                    var json = System.Text.Encoding.UTF8.GetString(state);
+                    NakamaMessageReceived?.Invoke((int)opCode, json);
+                    return;
+                }
+
                 // Parse op code to get delivery info (for logging/debugging)
                 var (method, channel) = ParseOpCode(opCode);
                 

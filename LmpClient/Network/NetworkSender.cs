@@ -62,17 +62,14 @@ namespace LmpClient.Network
             {
                 if (message is IMasterServerMessageBase)
                 {
-                    if (NetworkMain.ClientConnection.Status == NetPeerStatus.NotRunning)
+                    if (NetworkMain.ClientConnection.State == LmpCommon.Network.NetworkConnectionState.Disconnected)
                     {
                         LunaLog.Log("Starting client to send unconnected message");
                         NetworkMain.ClientConnection.Start();
                     }
-                    while (NetworkMain.ClientConnection.Status != NetPeerStatus.Running)
-                    {
-                        LunaLog.Log("Waiting for client to start up to send unconnected message");
-                        // Still trying to start up
-                        Thread.Sleep(50);
-                    }
+                    // We don't need to wait for "Running" state as Start() should initialize what's needed
+                    // or the connection implementation handles it.
+                    // However, for Lidgren specifically, Start() is synchronous for the peer thread start.
 
                     IPEndPoint[] masterServers;
                     if (string.IsNullOrEmpty(SettingsSystem.CurrentSettings.CustomMasterServer))
@@ -87,26 +84,63 @@ namespace LmpClient.Network
                     }
                     foreach (var masterServer in masterServers)
                     {
-                        // Don't reuse lidgren messages, it does that on it's own
-                        var lidgrenMsg = NetworkMain.ClientConnection.CreateMessage(message.GetMessageSize());
-
+                        // Use SerializationClient to create the message for serialization
+                        var lidgrenMsg = NetworkMain.SerializationClient.CreateMessage(message.GetMessageSize());
                         message.Serialize(lidgrenMsg);
-                        NetworkMain.ClientConnection.SendUnconnectedMessage(lidgrenMsg, masterServer);
+
+                        // Extract bytes and send using the connection interface
+                        // Note: SendUnconnectedMessage is not part of INetworkConnection yet,
+                        // but for master servers we might need a specific handling or cast if we want to keep using Lidgren directly for this part
+                        // OR we should update INetworkConnection to support unconnected messages.
+                        // For now, assuming we are still using Lidgren for master server communication or we need to cast.
+                        // BUT the task says "Update SendNetworkMessage to use SerializationClient... and call ClientConnection.SendMessageAsync(bytes)"
+                        
+                        // Since INetworkConnection doesn't support SendUnconnectedMessage, we might need to cast to LidgrenNetworkConnection
+                        // or assume this part is handled differently.
+                        // However, the prompt specifically asked to use SerializationClient and ClientConnection.SendMessageAsync.
+                        // But SendMessageAsync implies a connected state.
+                        
+                        // For Master Server messages (unconnected), we might need to use the underlying Lidgren client if available,
+                        // or if we are strictly following the interface, we might need to add support for it.
+                        // Given the constraints, let's check if we can cast or if we should use a different approach.
+                        
+                        // Actually, for Master Servers, we are sending to specific endpoints.
+                        // INetworkConnection doesn't have SendUnconnectedMessage.
+                        // Let's use the SerializationClient to send unconnected messages for now as it is a NetClient,
+                        // OR we cast ClientConnection to LidgrenNetworkConnection if we want to use the main connection.
+                        // But ClientConnection is now INetworkConnection.
+                        
+                        // Let's use the SerializationClient for creating the message, and then we need to send it.
+                        // Since SerializationClient is a NetClient, we can use it to send unconnected messages directly!
+                        // It just needs to be started.
+                        
+                        if (NetworkMain.SerializationClient.Status == NetPeerStatus.NotRunning)
+                            NetworkMain.SerializationClient.Start();
+
+                        NetworkMain.SerializationClient.SendUnconnectedMessage(lidgrenMsg, masterServer);
                     }
                     // Force send of packets
-                    NetworkMain.ClientConnection.FlushSendQueue();
+                    NetworkMain.SerializationClient.FlushSendQueue();
                 }
                 else
                 {
-                    if (NetworkMain.ClientConnection == null || NetworkMain.ClientConnection.Status == NetPeerStatus.NotRunning
+                    if (NetworkMain.ClientConnection == null || NetworkMain.ClientConnection.State == LmpCommon.Network.NetworkConnectionState.Disconnected
                         || MainSystem.NetworkState < ClientState.Connected)
                     {
                         return;
                     }
-                    var lidgrenMsg = NetworkMain.ClientConnection.CreateMessage(message.GetMessageSize());
-
+                    
+                    // Use SerializationClient to create the message for serialization
+                    var lidgrenMsg = NetworkMain.SerializationClient.CreateMessage(message.GetMessageSize());
                     message.Serialize(lidgrenMsg);
-                    NetworkMain.ClientConnection.SendMessage(lidgrenMsg, message.NetDeliveryMethod, message.Channel);
+                    
+                    // Extract bytes
+                    var data = new byte[lidgrenMsg.LengthBytes];
+                    lidgrenMsg.ReadBytes(data, 0, lidgrenMsg.LengthBytes);
+
+                    // Send using the interface
+                    NetworkMain.ClientConnection.SendMessageAsync(data, (LmpCommon.Network.DeliveryMethod)message.NetDeliveryMethod, message.Channel);
+                    
                     // Force send of packets
                     NetworkMain.ClientConnection.FlushSendQueue();
                 }

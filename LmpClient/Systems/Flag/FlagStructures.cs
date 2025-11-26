@@ -8,6 +8,8 @@ namespace LmpClient.Systems.Flag
         public string ShaSum => Common.CalculateSha256Hash(FlagData);
         public bool Loaded { get; set; }
 
+        public ExtendedFlagInfo() { }
+
         public ExtendedFlagInfo(FlagInfo flagInfo)
         {
             FlagData = Common.TrimArray(flagInfo.FlagData, flagInfo.NumBytes);

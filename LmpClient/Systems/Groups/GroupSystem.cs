@@ -1,5 +1,7 @@
 ﻿using LmpClient.Base;
 using LmpClient.Network;
+using LmpClient.Network.Adapters;
+using LmpClient.Systems.Nakama;
 using LmpClient.Systems.SettingsSys;
 using LmpCommon.Message.Data.Groups;
 using System.Collections.Concurrent;
@@ -16,10 +18,40 @@ namespace LmpClient.Systems.Groups
 
         protected override bool ProcessMessagesInUnityThread => false;
 
+        protected override void OnEnabled()
+        {
+            base.OnEnabled();
+            if (NetworkMain.ClientConnection is NakamaNetworkConnection nakamaConn)
+            {
+                nakamaConn.NakamaMessageReceived += OnNakamaMessageReceived;
+            }
+        }
+
         protected override void OnDisabled()
         {
             base.OnDisabled();
             Groups.Clear();
+            if (NetworkMain.ClientConnection is NakamaNetworkConnection nakamaConn)
+            {
+                nakamaConn.NakamaMessageReceived -= OnNakamaMessageReceived;
+            }
+        }
+
+        private void OnNakamaMessageReceived(int opCode, string data)
+        {
+            if (opCode == 80) // Group
+            {
+                var nakamaGroup = LmpClient.Utilities.Json.Deserialize<NakamaGroup>(data);
+                var group = new Group
+                {
+                    Name = nakamaGroup.Name,
+                    Owner = nakamaGroup.Owner,
+                    Members = nakamaGroup.Members.ToArray(),
+                    Invited = nakamaGroup.Invited.ToArray()
+                };
+
+                Groups.AddOrUpdate(group.Name, group, (key, existingVal) => group);
+            }
         }
 
         public void JoinGroup(string groupName)
@@ -34,10 +66,24 @@ namespace LmpClient.Systems.Groups
                     var newInvited = new List<string>(expectedGroup.Invited) { SettingsSystem.CurrentSettings.PlayerName };
                     expectedGroup.Invited = newInvited.ToArray();
 
-                    var msgData = NetworkMain.CliMsgFactory.CreateNewMessageData<GroupUpdateMsgData>();
-                    msgData.Group = expectedGroup;
+                    if (NetworkMain.ClientConnection is NakamaNetworkConnection nakamaConn)
+                    {
+                        var nakamaGroup = new NakamaGroup
+                        {
+                            Name = expectedGroup.Name,
+                            Owner = expectedGroup.Owner,
+                            Members = expectedGroup.Members.ToList(),
+                            Invited = expectedGroup.Invited.ToList()
+                        };
+                        TaskFactory.StartNew(() => nakamaConn.SendJsonAsync(80, nakamaGroup));
+                    }
+                    else
+                    {
+                        var msgData = NetworkMain.CliMsgFactory.CreateNewMessageData<GroupUpdateMsgData>();
+                        msgData.Group = expectedGroup;
 
-                    MessageSender.SendMessage(msgData);
+                        MessageSender.SendMessage(msgData);
+                    }
                 }
             }
         }
@@ -46,10 +92,24 @@ namespace LmpClient.Systems.Groups
         {
             if (!Groups.ContainsKey(groupName))
             {
-                var msgData = NetworkMain.CliMsgFactory.CreateNewMessageData<GroupCreateMsgData>();
-                msgData.GroupName = groupName;
+                if (NetworkMain.ClientConnection is NakamaNetworkConnection nakamaConn)
+                {
+                    var nakamaGroup = new NakamaGroup
+                    {
+                        Name = groupName,
+                        Owner = SettingsSystem.CurrentSettings.PlayerName,
+                        Members = new List<string>(),
+                        Invited = new List<string>()
+                    };
+                    TaskFactory.StartNew(() => nakamaConn.SendJsonAsync(80, nakamaGroup));
+                }
+                else
+                {
+                    var msgData = NetworkMain.CliMsgFactory.CreateNewMessageData<GroupCreateMsgData>();
+                    msgData.GroupName = groupName;
 
-                MessageSender.SendMessage(msgData);
+                    MessageSender.SendMessage(msgData);
+                }
             }
         }
 
@@ -78,10 +138,24 @@ namespace LmpClient.Systems.Groups
                 var newInvited = new List<string>(expectedGroup.Invited.Except(new[] { username }));
                 expectedGroup.Invited = newInvited.ToArray();
 
-                var msgData = NetworkMain.CliMsgFactory.CreateNewMessageData<GroupUpdateMsgData>();
-                msgData.Group = expectedGroup;
+                if (NetworkMain.ClientConnection is NakamaNetworkConnection nakamaConn)
+                {
+                    var nakamaGroup = new NakamaGroup
+                    {
+                        Name = expectedGroup.Name,
+                        Owner = expectedGroup.Owner,
+                        Members = expectedGroup.Members.ToList(),
+                        Invited = expectedGroup.Invited.ToList()
+                    };
+                    TaskFactory.StartNew(() => nakamaConn.SendJsonAsync(80, nakamaGroup));
+                }
+                else
+                {
+                    var msgData = NetworkMain.CliMsgFactory.CreateNewMessageData<GroupUpdateMsgData>();
+                    msgData.Group = expectedGroup;
 
-                MessageSender.SendMessage(msgData);
+                    MessageSender.SendMessage(msgData);
+                }
             }
         }
 
@@ -99,10 +173,24 @@ namespace LmpClient.Systems.Groups
                 var newInvited = new List<string>(expectedGroup.Invited.Except(new[] { username }));
                 expectedGroup.Invited = newInvited.ToArray();
 
-                var msgData = NetworkMain.CliMsgFactory.CreateNewMessageData<GroupUpdateMsgData>();
-                msgData.Group = expectedGroup;
+                if (NetworkMain.ClientConnection is NakamaNetworkConnection nakamaConn)
+                {
+                    var nakamaGroup = new NakamaGroup
+                    {
+                        Name = expectedGroup.Name,
+                        Owner = expectedGroup.Owner,
+                        Members = expectedGroup.Members.ToList(),
+                        Invited = expectedGroup.Invited.ToList()
+                    };
+                    TaskFactory.StartNew(() => nakamaConn.SendJsonAsync(80, nakamaGroup));
+                }
+                else
+                {
+                    var msgData = NetworkMain.CliMsgFactory.CreateNewMessageData<GroupUpdateMsgData>();
+                    msgData.Group = expectedGroup;
 
-                MessageSender.SendMessage(msgData);
+                    MessageSender.SendMessage(msgData);
+                }
             }
         }
     }

@@ -459,6 +459,7 @@
     <Compile Include="GlobalSuppressions.cs" />
     <Compile Include="Network\Adapters\LidgrenNetworkConnection.cs" />
     <Compile Include="Network\Adapters\NakamaNetworkConnection.cs" />
+    <Compile Include="Network\Lidgren\LidgrenMessageHelper.cs" />
     <Compile Include="Network\NetworkConnectionFactory.cs" />
     <Compile Include="Network\NetworkMain.cs" />
     <Compile Include="Network\NetworkStatistics.cs" />
@@ -533,6 +534,7 @@
     <Compile Include="Systems\Scenario\ScenarioStructures.cs" />
     <Compile Include="Systems\SettingsSys\SettingsReadSaveHandler.cs" />
     <Compile Include="Systems\SettingsSys\SettingsStructures.cs" />
+    <Compile Include="Systems\Nakama\NakamaDataTypes.cs" />
     <Compile Include="Systems\ModApi\ModApiSystem.cs" />
     <Compile Include="Systems\Flag\FlagSystem.cs" />
     <Compile Include="Systems\Lock\LockSystem.cs" />
