@@ -87,6 +87,21 @@ namespace LmpClient.Systems.Nakama
         public int height;
         public string image_data;
         public string miniature_data;
+        public int num_bytes;
+    }
+
+    [Serializable]
+    public class NakamaScreenshotFoldersResponse
+    {
+        public List<string> folders = new List<string>();
+        public int num_folders;
+    }
+
+    [Serializable]
+    public class NakamaScreenshotListRequest
+    {
+        public string folder_name;
+        public long[] already_owned_ids = Array.Empty<long>();
     }
 
     [Serializable]
@@ -105,6 +120,19 @@ namespace LmpClient.Systems.Nakama
         public string folder_name;
         public List<NakamaScreenshotSummary> screenshots = new List<NakamaScreenshotSummary>();
         public int num_screenshots;
+    }
+
+    [Serializable]
+    public class NakamaScreenshotDownloadRequest
+    {
+        public string folder_name;
+        public long date_taken;
+    }
+
+    [Serializable]
+    public class NakamaScreenshotDownloadResponse
+    {
+        public NakamaScreenshot screenshot;
     }
 
     [Serializable]

@@ -1,4 +1,5 @@
-﻿using System.Collections.Concurrent;
+﻿using System;
+using System.Collections.Concurrent;
 using System.IO;
 using System.Linq;
 using LmpClient.Base;
@@ -8,6 +9,7 @@ using LmpClient.Systems.Nakama;
 using LmpClient.Systems.SettingsSys;
 using LmpClient.Utilities;
 using LmpCommon;
+using LmpCommon.Enums;
 using LmpCommon.Flags;
 using UnityEngine;
 
@@ -21,6 +23,8 @@ namespace LmpClient.Systems.Flag
         public static string LmpFlagPath { get; } = CommonUtil.CombinePaths(MainSystem.KspPath, "GameData", "LunaMultiplayer", "Flags");
         public ConcurrentDictionary<string, ExtendedFlagInfo> ServerFlags { get; } = new ConcurrentDictionary<string, ExtendedFlagInfo>();
         private bool FlagSystemReady => Enabled && HighLogic.CurrentGame?.flagURL != null;
+        private NakamaNetworkConnection NakamaConnection => NetworkMain.ClientConnection as NakamaNetworkConnection;
+        private bool IsUsingNakama => NakamaConnection != null;
 
         #endregion
 
@@ -35,10 +39,13 @@ namespace LmpClient.Systems.Flag
             base.OnEnabled();
             GameEvents.onFlagSelect.Add(FlagEvents.OnFlagSelect);
             GameEvents.onMissionFlagSelect.Add(FlagEvents.OnMissionFlagSelect);
-            if (NetworkMain.ClientConnection is NakamaNetworkConnection nakamaConn)
+
+            if (IsUsingNakama)
             {
-                nakamaConn.NakamaMessageReceived += OnNakamaMessageReceived;
+                NakamaConnection.NakamaMessageReceived += OnNakamaMessageReceived;
             }
+
+            RequestFlags();
             SetupRoutine(new RoutineDefinition(5000, RoutineExecution.Update, HandleFlags));
         }
 
@@ -48,42 +55,51 @@ namespace LmpClient.Systems.Flag
             ServerFlags.Clear();
             GameEvents.onFlagSelect.Remove(FlagEvents.OnFlagSelect);
             GameEvents.onMissionFlagSelect.Remove(FlagEvents.OnMissionFlagSelect);
-            if (NetworkMain.ClientConnection is NakamaNetworkConnection nakamaConn)
+
+            if (IsUsingNakama)
             {
-                nakamaConn.NakamaMessageReceived -= OnNakamaMessageReceived;
+                NakamaConnection.NakamaMessageReceived -= OnNakamaMessageReceived;
             }
         }
 
         private void OnNakamaMessageReceived(int opCode, string data)
         {
-            if (opCode == 110) // Flag
+            switch (opCode)
             {
-                var nakamaFlag = LmpClient.Utilities.Json.Deserialize<NakamaFlag>(data);
-                var flagInfo = new ExtendedFlagInfo
-                {
-                    FlagName = nakamaFlag.FlagName,
-                    Owner = nakamaFlag.Owner,
-                    FlagData = System.Convert.FromBase64String(nakamaFlag.FlagData)
-                };
-                // ShaSum is calculated in property getter in ExtendedFlagInfo
+                case 110:
+                    var nakamaFlag = Json.Deserialize<NakamaFlag>(data);
+                    UpsertFlag(nakamaFlag);
+                    break;
+                case 112:
+                    var listResponse = Json.Deserialize<NakamaFlagListResponse>(data);
+                    if (listResponse?.flags == null)
+                        return;
 
-                if (ServerFlags.TryGetValue(flagInfo.FlagName, out var existingFlag))
-                {
-                    if (existingFlag.ShaSum != flagInfo.ShaSum)
+                    foreach (var flag in listResponse.flags)
                     {
-                        ServerFlags.TryUpdate(flagInfo.FlagName, flagInfo, existingFlag);
+                        UpsertFlag(flag);
                     }
-                }
-                else
-                {
-                    ServerFlags.TryAdd(flagInfo.FlagName, flagInfo);
-                }
+
+                    MainSystem.NetworkState = ClientState.FlagsSynced;
+                    break;
             }
         }
 
         #endregion
 
         #region Update methods
+
+        private void RequestFlags()
+        {
+            if (IsUsingNakama)
+            {
+                TaskFactory.StartNew(() => NakamaConnection.SendJsonAsync(111, new { }));
+            }
+            else
+            {
+                MessageSender.SendFlagsRequest();
+            }
+        }
 
         private void HandleFlags()
         {
@@ -138,15 +154,16 @@ namespace LmpClient.Systems.Flag
 
                 LunaLog.Log($"[LMP]: Uploading {Path.GetFileName(flagUrl)} flag");
                 
-                if (NetworkMain.ClientConnection is NakamaNetworkConnection nakamaConn)
+                if (IsUsingNakama)
                 {
                     var nakamaFlag = new NakamaFlag
                     {
-                        FlagName = flagUrl,
-                        Owner = SettingsSystem.CurrentSettings.PlayerName,
-                        FlagData = System.Convert.ToBase64String(flagData)
+                        flag_name = flagUrl,
+                        owner = SettingsSystem.CurrentSettings.PlayerName,
+                        flag_data = Convert.ToBase64String(flagData),
+                        num_bytes = flagData.Length
                     };
-                    TaskFactory.StartNew(() => nakamaConn.SendJsonAsync(110, nakamaFlag));
+                    TaskFactory.StartNew(() => NakamaConnection.SendJsonAsync(110, nakamaFlag));
                 }
                 else
                 {
@@ -186,6 +203,42 @@ namespace LmpClient.Systems.Flag
                 LunaLog.LogError($"[LMP]: Failed to load flag {flagInfo.FlagName}");
             }
         }
+        private void UpsertFlag(NakamaFlag nakamaFlag)
+        {
+            if (nakamaFlag == null || string.IsNullOrWhiteSpace(nakamaFlag.flag_name) || string.IsNullOrWhiteSpace(nakamaFlag.flag_data))
+                return;
+
+            byte[] flagBytes;
+            try
+            {
+                flagBytes = Convert.FromBase64String(nakamaFlag.flag_data);
+            }
+            catch (FormatException)
+            {
+                return;
+            }
+
+            var flagInfo = new ExtendedFlagInfo
+            {
+                FlagName = nakamaFlag.flag_name,
+                Owner = nakamaFlag.owner,
+                FlagData = flagBytes
+            };
+
+            if (ServerFlags.TryGetValue(flagInfo.FlagName, out var existingFlag))
+            {
+                if (existingFlag.ShaSum != flagInfo.ShaSum)
+                {
+                    ServerFlags.TryUpdate(flagInfo.FlagName, flagInfo, existingFlag);
+                }
+            }
+            else
+            {
+                ServerFlags.TryAdd(flagInfo.FlagName, flagInfo);
+            }
+        }
+
+
 
         #endregion
     }

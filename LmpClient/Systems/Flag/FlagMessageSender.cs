@@ -1,6 +1,7 @@
 ﻿using LmpClient.Base;
 using LmpClient.Base.Interface;
 using LmpClient.Network;
+using LmpClient.Network.Adapters;
 using LmpClient.Systems.SettingsSys;
 using LmpCommon.Message.Client;
 using LmpCommon.Message.Data.Flag;
@@ -11,13 +12,21 @@ namespace LmpClient.Systems.Flag
 {
     public class FlagMessageSender : SubSystem<FlagSystem>, IMessageSender
     {
+        private bool ShouldUseLidgren => !(NetworkMain.ClientConnection is NakamaNetworkConnection);
+
         public void SendMessage(IMessageData msg)
         {
+            if (!ShouldUseLidgren)
+                return;
+
             TaskFactory.StartNew(() => NetworkSender.QueueOutgoingMessage(MessageFactory.CreateNew<FlagCliMsg>(msg)));
         }
 
         public void SendFlagsRequest()
         {
+            if (!ShouldUseLidgren)
+                return;
+
             TaskFactory.StartNew(() => NetworkSender.QueueOutgoingMessage(NetworkMain.CliMsgFactory.CreateNew<FlagCliMsg, FlagListRequestMsgData>()));
         }
 

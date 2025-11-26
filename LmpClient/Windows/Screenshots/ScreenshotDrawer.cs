@@ -44,7 +44,7 @@ namespace LmpClient.Windows.Screenshots
         {
             GUILayout.BeginVertical();
             GUI.DragWindow(MoveRect);
-            DrawRefreshButton(() => System.MessageSender.RequestFolders());
+            DrawRefreshButton(() => System.RequestFolders());
             GUILayout.Label(ScreenshotKeyLabel);
             GUILayout.Space(15);
 
@@ -100,7 +100,7 @@ namespace LmpClient.Windows.Screenshots
             DrawRefreshButton(() =>
             {
                 _selectedImage = 0;
-                System.MessageSender.RequestMiniatures(_selectedFolder);
+                System.RequestMiniatures(_selectedFolder);
                 Miniatures.Clear();
             });
             GUILayout.Space(15);
@@ -197,7 +197,7 @@ namespace LmpClient.Windows.Screenshots
             else
             {
                 DrawWaitIcon(false);
-                System.MessageSender.RequestImage(_selectedFolder, _selectedImage);
+                System.RequestImage(_selectedFolder, _selectedImage);
             }
             GUILayout.EndScrollView();
             GUILayout.EndVertical();

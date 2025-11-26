@@ -126,7 +126,7 @@ Nakama requires a valid Session to connect to a socket.
 *   [x] Implement stateless channel support (Chat, PlayerStatus) using Nakama JSON payloads.
 *   [x] Implement GroupSystem over Nakama Storage/OpCodes 80-83.
 *   [x] Migrate CraftLibrary to Nakama Storage APIs.
-*   [ ] Migrate Screenshot/Flag systems to Nakama Storage APIs.
+*   [x] Migrate Screenshot/Flag systems to Nakama Storage APIs.
 *   [ ] Replace the "Master Server" list with a Nakama-based Match List UI.
 *   [ ] Add "Create Match" button in UI.
 
