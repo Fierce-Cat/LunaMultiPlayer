@@ -128,26 +128,33 @@ namespace LmpClient.Windows.Options
                 GUILayout.Label($"{LocalizationContainer.OptionsWindowText.Mtu} {NetworkMain.Config.MaximumTransmissionUnit}");
                 if (MainSystem.NetworkState <= ClientState.Disconnected)
                 {
-                    if (NetworkMain.ClientConnection.Status != NetPeerStatus.NotRunning)
+                    // Only show reset network if we are using Lidgren and it's running, or if we want to allow resetting Nakama too
+                    // For now, let's just show it always if disconnected, or check if it's Lidgren
+                    if (NetworkMain.ClientConnection is LmpClient.Network.Adapters.LidgrenNetworkConnection lidgrenConn)
                     {
+                        // Accessing Lidgren specific properties would require casting or exposing them in INetworkConnection
+                        // For now, let's just allow reset
                         if (GUILayout.Button(LocalizationContainer.OptionsWindowText.ResetNetwork))
                             NetworkMain.ResetNetworkSystem();
                     }
                     else
                     {
-                        var mtuValue = (int)Math.Round(GUILayout.HorizontalScrollbar(SettingsSystem.CurrentSettings.Mtu, 0, 1, NetworkMain.MaxMtuSize));
-                        if (mtuValue != SettingsSystem.CurrentSettings.Mtu)
-                        {
-                            NetworkMain.Config.MaximumTransmissionUnit = SettingsSystem.CurrentSettings.Mtu = mtuValue;
-                            SettingsSystem.SaveSettings();
-                        }
+                        if (GUILayout.Button(LocalizationContainer.OptionsWindowText.ResetNetwork))
+                            NetworkMain.ResetNetworkSystem();
+                    }
 
-                        var autoExpandValue = GUILayout.Toggle(SettingsSystem.CurrentSettings.AutoExpandMtu, LocalizationContainer.OptionsWindowText.AutoExpandMtu);
-                        if (autoExpandValue != SettingsSystem.CurrentSettings.AutoExpandMtu)
-                        {
-                            NetworkMain.Config.AutoExpandMTU = SettingsSystem.CurrentSettings.AutoExpandMtu = autoExpandValue;
-                            SettingsSystem.SaveSettings();
-                        }
+                    var mtuValue = (int)Math.Round(GUILayout.HorizontalScrollbar(SettingsSystem.CurrentSettings.Mtu, 0, 1, NetworkMain.MaxMtuSize));
+                    if (mtuValue != SettingsSystem.CurrentSettings.Mtu)
+                    {
+                        NetworkMain.Config.MaximumTransmissionUnit = SettingsSystem.CurrentSettings.Mtu = mtuValue;
+                        SettingsSystem.SaveSettings();
+                    }
+
+                    var autoExpandValue = GUILayout.Toggle(SettingsSystem.CurrentSettings.AutoExpandMtu, LocalizationContainer.OptionsWindowText.AutoExpandMtu);
+                    if (autoExpandValue != SettingsSystem.CurrentSettings.AutoExpandMtu)
+                    {
+                        NetworkMain.Config.AutoExpandMTU = SettingsSystem.CurrentSettings.AutoExpandMtu = autoExpandValue;
+                        SettingsSystem.SaveSettings();
                     }
                 }
 

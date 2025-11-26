@@ -42,7 +42,8 @@ namespace LmpClient.Network
             DualStack = true
         };
 
-        public static NetClient ClientConnection { get; private set; }
+        public static LmpCommon.Network.INetworkConnection ClientConnection { get; private set; }
+        internal static NetClient SerializationClient { get; private set; }
 
         public static void DeleteAllTheControlLocksSoTheSpaceCentreBugGoesAway()
         {
@@ -95,7 +96,15 @@ namespace LmpClient.Network
                 Config.LocalAddress = IPAddress.Any;
                 Config.DualStack = false;
             }
-            ClientConnection = new NetClient(Config.Clone());
+            
+            // Create a separate NetClient just for serialization purposes
+            SerializationClient = new NetClient(Config.Clone());
+            
+            // Use the factory to create the connection
+            // Check if we should use Nakama based on a setting or flag (placeholder for now)
+            // For testing the tunnel, we can manually switch this or add a setting later.
+            // ClientConnection = NetworkConnectionFactory.Create(NetworkConnectionFactory.NetworkBackend.Nakama);
+            ClientConnection = NetworkConnectionFactory.Create(NetworkConnectionFactory.NetworkBackend.Lidgren);
         }
 
         public static void ResetNetworkSystem()
@@ -103,9 +112,9 @@ namespace LmpClient.Network
             NetworkConnection.ResetRequested = true;
             BannedPartsResourcesWindow.Singleton.Display = false;
 
-            if (ClientConnection.Status > NetPeerStatus.NotRunning)
+            if (ClientConnection.State != LmpCommon.Network.NetworkConnectionState.Disconnected)
             {
-                ClientConnection.Shutdown("Disconnected");
+                ClientConnection.Shutdown();
                 Thread.Sleep(1000);
             }
 

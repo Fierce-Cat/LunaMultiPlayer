@@ -1,9 +1,14 @@
 ﻿using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Text;
 using LmpClient.Base;
+using LmpClient.Network;
+using LmpClient.Network.Adapters;
 using LmpClient.Systems.Lock;
+using LmpClient.Systems.Nakama;
 using LmpClient.Systems.SafetyBubble;
 using LmpClient.Systems.SettingsSys;
+using LmpClient.Utilities;
 using LmpClient.VesselUtilities;
 using LmpCommon;
 
@@ -12,6 +17,8 @@ namespace LmpClient.Systems.Status
     public class StatusSystem : MessageSystem<StatusSystem, StatusMessageSender, StatusMessageHandler>
     {
         #region Fields
+
+        private NakamaNetworkConnection _nakamaConnection;
 
         public PlayerStatus MyPlayerStatus { get; } = new PlayerStatus();
 
@@ -43,12 +50,25 @@ namespace LmpClient.Systems.Status
 
             MessageSender.SendOwnStatus();
 
+            if (NetworkMain.ClientConnection is NakamaNetworkConnection nakamaConnection)
+            {
+                _nakamaConnection = nakamaConnection;
+                _nakamaConnection.NakamaMessageReceived += OnNakamaMessageReceived;
+            }
+
             SetupRoutine(new RoutineDefinition(1000, RoutineExecution.Update, CheckPlayerStatus));
         }
 
         protected override void OnDisabled()
         {
             base.OnDisabled();
+
+            if (_nakamaConnection != null)
+            {
+                _nakamaConnection.NakamaMessageReceived -= OnNakamaMessageReceived;
+                _nakamaConnection = null;
+            }
+
             PlayerStatusList.Clear();
         }
 
@@ -76,6 +96,88 @@ namespace LmpClient.Systems.Status
                 PlayerStatusList.TryRemove(playerToRemove, out _);
             }
         }
+
+        private void OnNakamaMessageReceived(int opCode, string data)
+        {
+            if (opCode != 3 || string.IsNullOrEmpty(data))
+                return;
+
+            var message = Json.Deserialize<NakamaStatusMessage>(data);
+            if (message == null || string.IsNullOrEmpty(message.type))
+                return;
+
+            switch (message.type)
+            {
+                case "player_join":
+                    if (!string.IsNullOrEmpty(message.username))
+                    {
+                        UpdateStatusEntry(message.username, string.Empty, StatusTexts.Syncing);
+                    }
+                    break;
+                case "player_status_update":
+                    if (!string.IsNullOrEmpty(message.username))
+                    {
+                        var payload = ParseStatusPayload(message.status);
+                        var statusText = payload?.status_text ?? StatusTexts.Syncing;
+                        var vesselText = payload?.vessel_text ?? string.Empty;
+                        UpdateStatusEntry(message.username, vesselText, statusText);
+                    }
+                    break;
+                case "player_leave":
+                    if (!string.IsNullOrEmpty(message.username))
+                    {
+                        RemovePlayer(message.username);
+                    }
+                    break;
+            }
+        }
+
+        private static NakamaStatusPayload ParseStatusPayload(object rawStatus)
+        {
+            if (rawStatus == null)
+                return null;
+
+            if (rawStatus is NakamaStatusPayload payload)
+                return payload;
+
+            if (rawStatus is Dictionary<string, object> dict)
+            {
+                var parsed = new NakamaStatusPayload
+                {
+                    status_text = dict.TryGetValue("status_text", out var statusObj) ? statusObj?.ToString() : string.Empty,
+                    vessel_text = dict.TryGetValue("vessel_text", out var vesselObj) ? vesselObj?.ToString() : string.Empty
+                };
+                return parsed;
+            }
+
+            return new NakamaStatusPayload
+            {
+                status_text = rawStatus.ToString(),
+                vessel_text = string.Empty
+            };
+        }
+
+        private void UpdateStatusEntry(string playerName, string vesselText, string statusText)
+        {
+            if (string.IsNullOrEmpty(playerName))
+                return;
+
+            if (PlayerStatusList.ContainsKey(playerName))
+            {
+                PlayerStatusList[playerName].VesselText = vesselText;
+                PlayerStatusList[playerName].StatusText = statusText;
+            }
+            else
+            {
+                PlayerStatusList.TryAdd(playerName, new PlayerStatus
+                {
+                    PlayerName = playerName,
+                    VesselText = vesselText,
+                    StatusText = statusText
+                });
+            }
+        }
+
 
         #endregion
 

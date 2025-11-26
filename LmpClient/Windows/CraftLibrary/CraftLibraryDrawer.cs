@@ -14,7 +14,7 @@ namespace LmpClient.Windows.CraftLibrary
         {
             GUILayout.BeginVertical();
             GUI.DragWindow(MoveRect);
-            DrawRefreshAndUploadButton(() => System.MessageSender.SendRequestFoldersMsg(), () => _drawUploadScreen = true);
+            DrawRefreshAndUploadButton(() => System.RequestFolders(), () => _drawUploadScreen = true);
             GUILayout.Space(15);
 
             GUILayout.BeginVertical();
@@ -65,7 +65,7 @@ namespace LmpClient.Windows.CraftLibrary
 
             GUILayout.BeginVertical();
             GUI.DragWindow(MoveRect);
-            DrawRefreshButton(() => System.MessageSender.SendRequestCraftListMsg(_selectedFolder));
+            DrawRefreshButton(() => System.RequestCraftList(_selectedFolder));
             GUILayout.Space(15);
 
             if (string.IsNullOrEmpty(_selectedFolder)) return;
@@ -114,7 +114,7 @@ namespace LmpClient.Windows.CraftLibrary
             {
                 if (GUILayout.Button(DeleteIcon, GUILayout.Width(35)))
                 {
-                    System.MessageSender.SendDeleteCraftMsg(craftBasicEntry);
+                    System.DeleteCraft(craftBasicEntry);
                     _selectedFolder = null;
                 }
             }

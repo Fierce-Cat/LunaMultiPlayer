@@ -106,8 +106,22 @@ namespace LmpClient.Network
         {
             if (Servers.TryGetValue(serverId, out var serverInfo))
             {
-                var amListeningOnIPv6 =
-                    NetworkMain.ClientConnection.Socket.AddressFamily == AddressFamily.InterNetworkV6;
+                // Check if we are using Lidgren to access the socket
+                bool amListeningOnIPv6 = false;
+                if (NetworkMain.ClientConnection is LmpClient.Network.Adapters.LidgrenNetworkConnection lidgrenConn)
+                {
+                    // We need to access the underlying NetClient to get the socket
+                    // Using reflection as a temporary workaround until we expose it or refactor
+                    var field = typeof(LmpClient.Network.Adapters.LidgrenNetworkConnection).GetField("_client", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                    if (field != null)
+                    {
+                        var client = field.GetValue(lidgrenConn) as global::Lidgren.Network.NetClient;
+                        if (client != null)
+                        {
+                            amListeningOnIPv6 = client.Socket.AddressFamily == AddressFamily.InterNetworkV6;
+                        }
+                    }
+                }
 
                 if (ServerIsInLocalLan(serverInfo.ExternalEndpoint) || (amListeningOnIPv6 && ServerIsInLocalLan(serverInfo.InternalEndpoint6)))
                 {
@@ -129,7 +143,21 @@ namespace LmpClient.Network
                         msgData.Id = serverId;
                         msgData.Token = MainSystem.UniqueIdentifier;
 
-                        var localPort = NetworkMain.ClientConnection.Port;
+                        // Get local port from connection if possible, otherwise default or 0
+                        int localPort = 0;
+                        if (NetworkMain.ClientConnection is LmpClient.Network.Adapters.LidgrenNetworkConnection lidgrenConnPort)
+                        {
+                             var field = typeof(LmpClient.Network.Adapters.LidgrenNetworkConnection).GetField("_client", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                             if (field != null)
+                             {
+                                 var client = field.GetValue(lidgrenConnPort) as global::Lidgren.Network.NetClient;
+                                 if (client != null)
+                                 {
+                                     localPort = client.Port;
+                                 }
+                             }
+                        }
+
                         msgData.InternalEndpoint = new IPEndPoint(LunaNetUtils.GetOwnInternalIPv4Address(), localPort);
                         // Only send IPv6 address if actually listening on IPv6, otherwise send loopback with means "none".
                         msgData.InternalEndpoint6 = amListeningOnIPv6

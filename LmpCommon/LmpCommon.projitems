@@ -272,5 +272,10 @@
     <Compile Include="$(MSBuildThisFileDirectory)Time\TimeUtil.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Xml\LunaXmlSerializer.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Xml\XmlCommentAttribute.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Network\DeliveryMethod.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Network\INetworkConnection.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Network\INetworkStatistics.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Network\NetworkConnectionState.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Network\NetworkStatisticsBase.cs" />
   </ItemGroup>
 </Project>

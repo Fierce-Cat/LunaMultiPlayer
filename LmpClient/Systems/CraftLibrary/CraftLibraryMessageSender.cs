@@ -2,6 +2,7 @@
 using LmpClient.Base;
 using LmpClient.Base.Interface;
 using LmpClient.Network;
+using LmpClient.Network.Adapters;
 using LmpCommon.Message.Client;
 using LmpCommon.Message.Data.CraftLibrary;
 using LmpCommon.Message.Interface;
@@ -10,13 +11,21 @@ namespace LmpClient.Systems.CraftLibrary
 {
     public class CraftLibraryMessageSender : SubSystem<CraftLibrarySystem>, IMessageSender
     {
+        private static bool ShouldUseLidgren => !(NetworkMain.ClientConnection is NakamaNetworkConnection);
+
         public void SendMessage(IMessageData msg)
         {
+            if (!ShouldUseLidgren)
+                return;
+
             TaskFactory.StartNew(() => NetworkSender.QueueOutgoingMessage(MessageFactory.CreateNew<CraftLibraryCliMsg>(msg)));
         }
 
         public void SendCraftMsg(CraftEntry craft)
         {
+            if (!ShouldUseLidgren)
+                return;
+
             var msgData = NetworkMain.CliMsgFactory.CreateNewMessageData<CraftLibraryDataMsgData>();
             msgData.Craft.FolderName = craft.FolderName;
             msgData.Craft.CraftName = craft.CraftName;
@@ -34,12 +43,18 @@ namespace LmpClient.Systems.CraftLibrary
 
         public void SendRequestFoldersMsg()
         {
+            if (!ShouldUseLidgren)
+                return;
+
             var msgData = NetworkMain.CliMsgFactory.CreateNewMessageData<CraftLibraryFoldersRequestMsgData>();
             SendMessage(msgData);
         }
 
         public void SendRequestCraftListMsg(string folderName)
         {
+            if (!ShouldUseLidgren)
+                return;
+
             var msgData = NetworkMain.CliMsgFactory.CreateNewMessageData<CraftLibraryListRequestMsgData>();
             msgData.FolderName = folderName;
 
@@ -48,6 +63,9 @@ namespace LmpClient.Systems.CraftLibrary
 
         public void SendRequestCraftMsg(CraftBasicEntry craft)
         {
+            if (!ShouldUseLidgren)
+                return;
+
             var msgData = NetworkMain.CliMsgFactory.CreateNewMessageData<CraftLibraryDownloadRequestMsgData>();
             msgData.CraftRequested.FolderName = craft.FolderName;
             msgData.CraftRequested.CraftName = craft.CraftName;
@@ -58,6 +76,9 @@ namespace LmpClient.Systems.CraftLibrary
 
         public void SendDeleteCraftMsg(CraftBasicEntry craft)
         {
+            if (!ShouldUseLidgren)
+                return;
+
             var msgData = NetworkMain.CliMsgFactory.CreateNewMessageData<CraftLibraryDeleteRequestMsgData>();
             msgData.CraftToDelete.FolderName = craft.FolderName;
             msgData.CraftToDelete.CraftName = craft.CraftName;

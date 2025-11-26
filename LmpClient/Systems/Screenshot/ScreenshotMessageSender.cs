@@ -1,6 +1,7 @@
 ﻿using LmpClient.Base;
 using LmpClient.Base.Interface;
 using LmpClient.Network;
+using LmpClient.Network.Adapters;
 using LmpCommon.Message.Client;
 using LmpCommon.Message.Data.Screenshot;
 using LmpCommon.Message.Interface;
@@ -14,14 +15,21 @@ namespace LmpClient.Systems.Screenshot
     public class ScreenshotMessageSender : SubSystem<ScreenshotSystem>, IMessageSender
     {
         public static readonly Dictionary<string, DateTime> RequestedImages = new Dictionary<string, DateTime>();
+        private bool ShouldUseLidgren => !(NetworkMain.ClientConnection is NakamaNetworkConnection);
 
         public void SendMessage(IMessageData msg)
         {
+            if (!ShouldUseLidgren)
+                return;
+
             TaskFactory.StartNew(() => NetworkSender.QueueOutgoingMessage(MessageFactory.CreateNew<ScreenshotCliMsg>(msg)));
         }
 
         public void SendScreenshot(byte[] data)
         {
+            if (!ShouldUseLidgren)
+                return;
+
             var msgData = NetworkMain.CliMsgFactory.CreateNewMessageData<ScreenshotDataMsgData>();
 
             msgData.Screenshot.DateTaken = LunaNetworkTime.UtcNow.ToBinary();
@@ -37,12 +45,18 @@ namespace LmpClient.Systems.Screenshot
 
         public void RequestFolders()
         {
+            if (!ShouldUseLidgren)
+                return;
+
             var msgData = NetworkMain.CliMsgFactory.CreateNewMessageData<ScreenshotFoldersRequestMsgData>();
             SendMessage(msgData);
         }
 
         public void RequestMiniatures(string folderName)
         {
+            if (!ShouldUseLidgren)
+                return;
+
             var msgData = NetworkMain.CliMsgFactory.CreateNewMessageData<ScreenshotListRequestMsgData>();
             msgData.FolderName = folderName;
 
@@ -61,6 +75,9 @@ namespace LmpClient.Systems.Screenshot
 
         public void RequestImage(string folderName, long dateTaken)
         {
+            if (!ShouldUseLidgren)
+                return;
+
             if (!RequestedImages.ContainsKey($"folderName_{dateTaken}") || RequestedImages[$"folderName_{dateTaken}"] < DateTime.UtcNow - TimeSpan.FromSeconds(30))
             {
                 var msgData = NetworkMain.CliMsgFactory.CreateNewMessageData<ScreenshotDownloadRequestMsgData>();

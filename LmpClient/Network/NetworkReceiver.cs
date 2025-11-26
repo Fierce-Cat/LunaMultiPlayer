@@ -51,6 +51,8 @@ using LmpCommon.Time;
 using System;
 using System.Threading;
 
+using LmpClient.Network.Lidgren;
+
 namespace LmpClient.Network
 {
     public class NetworkReceiver
@@ -61,70 +63,15 @@ namespace LmpClient.Network
         public static void ReceiveMain()
         {
             LunaLog.Log("[LMP]: Receive thread started");
+            
+            // Subscribe to message received event
+            NetworkMain.ClientConnection.MessageReceived += HandleMessageReceived;
+            
             try
             {
                 while (!NetworkConnection.ResetRequested)
                 {
-                    while (NetworkMain.ClientConnection.Status == NetPeerStatus.NotRunning)
-                    {
-                        Thread.Sleep(50);
-                    }
-
-                    if (NetworkMain.ClientConnection.ReadMessage(out var msg))
-                    {
-                        switch (msg.MessageType)
-                        {
-                            case NetIncomingMessageType.DebugMessage:
-                                LunaLog.Log($"[Lidgren DEBUG] {msg.ReadString()}");
-                                break;
-                            case NetIncomingMessageType.VerboseDebugMessage:
-                                LunaLog.Log($"[Lidgren VERBOSE] {msg.ReadString()}");
-                                break;
-                            case NetIncomingMessageType.WarningMessage:
-                                LunaLog.Log($"[Lidgren WARNING] {msg.ReadString()}");
-                                break;
-                            case NetIncomingMessageType.NatIntroductionSuccess:
-                                NetworkServerList.HandleNatIntroductionSuccess(msg);
-                                break;
-                            case NetIncomingMessageType.UnconnectedData:
-                                NetworkServerList.HandleServersList(msg);
-                                break;
-                            case NetIncomingMessageType.ConnectionLatencyUpdated:
-                                NetworkStatistics.PingSec = msg.ReadFloat();
-                                break;
-                            case NetIncomingMessageType.Data:
-                                try
-                                {
-                                    var deserializedMsg = NetworkMain.SrvMsgFactory.Deserialize(msg, LunaNetworkTime.UtcNow.Ticks);
-                                    if (deserializedMsg != null)
-                                    {
-                                        QueueMessageToSystem(deserializedMsg as IServerMessageBase);
-                                    }
-                                }
-                                catch (Exception e)
-                                {
-                                    LunaLog.LogError($"[LMP]: Error deserializing message! {e}");
-                                }
-                                break;
-                            case NetIncomingMessageType.StatusChanged:
-                                switch ((NetConnectionStatus)msg.ReadByte())
-                                {
-                                    case NetConnectionStatus.Disconnected:
-                                        var reason = msg.ReadString();
-                                        NetworkConnection.Disconnect(reason);
-                                        break;
-                                }
-                                break;
-                            default:
-                                LunaLog.Log($"[LMP]: LIDGREN: {msg.MessageType} -- {msg.PeekString()}");
-                                break;
-                        }
-                        NetworkMain.ClientConnection.Recycle(msg);
-                    }
-                    else
-                    {
-                        Thread.Sleep(SettingsSystem.CurrentSettings.SendReceiveMsInterval);
-                    }
+                    Thread.Sleep(SettingsSystem.CurrentSettings.SendReceiveMsInterval);
                 }
             }
             catch (Exception e)
@@ -132,7 +79,31 @@ namespace LmpClient.Network
                 LunaLog.LogError($"[LMP]: Receive thread error: {e}");
                 NetworkMain.HandleDisconnectException(e);
             }
+            finally
+            {
+                NetworkMain.ClientConnection.MessageReceived -= HandleMessageReceived;
+            }
+            
             LunaLog.Log("[LMP]: Receive thread exited");
+        }
+
+        private static void HandleMessageReceived(byte[] data)
+        {
+            try
+            {
+                // Use helper to create NetIncomingMessage from bytes
+                var msg = LidgrenMessageHelper.CreateMessageFromBytes(data);
+                
+                var deserializedMsg = NetworkMain.SrvMsgFactory.Deserialize(msg, LunaNetworkTime.UtcNow.Ticks);
+                if (deserializedMsg != null)
+                {
+                    QueueMessageToSystem(deserializedMsg as IServerMessageBase);
+                }
+            }
+            catch (Exception e)
+            {
+                LunaLog.LogError($"[LMP]: Error deserializing message! {e}");
+            }
         }
 
         /// <summary>

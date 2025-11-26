@@ -1,5 +1,9 @@
 ﻿using LmpClient.Base;
+using LmpClient.Network;
+using LmpClient.Network.Adapters;
+using LmpClient.Systems.Nakama;
 using LmpClient.Systems.SettingsSys;
+using LmpClient.Utilities;
 using LmpClient.Windows.Chat;
 using System;
 using System.Collections.Concurrent;
@@ -22,6 +26,8 @@ namespace LmpClient.Systems.Chat
 
         public ConcurrentQueue<Tuple<string, string, string>> NewChatMessages { get; private set; } = new ConcurrentQueue<Tuple<string, string, string>>();
 
+        private NakamaNetworkConnection _nakamaConnection;
+
         #endregion
 
         #region Base overrides
@@ -36,6 +42,12 @@ namespace LmpClient.Systems.Chat
 
             ChatMessages = new LimitedQueue<Tuple<string, string, string>>(SettingsSystem.CurrentSettings.ChatBuffer);
             SetupRoutine(new RoutineDefinition(100, RoutineExecution.Update, ProcessReceivedMessages));
+
+            if (NetworkMain.ClientConnection is NakamaNetworkConnection nakamaConnection)
+            {
+                _nakamaConnection = nakamaConnection;
+                _nakamaConnection.NakamaMessageReceived += OnNakamaMessageReceived;
+            }
         }
 
         protected override void OnDisabled()
@@ -47,6 +59,12 @@ namespace LmpClient.Systems.Chat
 
             ChatMessages.Clear();
             NewChatMessages = new ConcurrentQueue<Tuple<string, string, string>>();
+
+            if (_nakamaConnection != null)
+            {
+                _nakamaConnection.NakamaMessageReceived -= OnNakamaMessageReceived;
+                _nakamaConnection = null;
+            }
         }
 
         #endregion
@@ -55,24 +73,37 @@ namespace LmpClient.Systems.Chat
 
         private void ProcessReceivedMessages()
         {
-            if (Enabled)
+            if (!Enabled)
+                return;
+
+            while (NewChatMessages.TryDequeue(out var chatMsg))
             {
-                while (NewChatMessages.TryDequeue(out var chatMsg))
+                NewMessageReceived = true;
+
+                if (!ChatWindow.Singleton.Display)
                 {
-                    NewMessageReceived = true;
-
-                    if (!ChatWindow.Singleton.Display)
-                    {
-                        LunaScreenMsg.PostScreenMessage($"{chatMsg.Item1}: {chatMsg.Item2}", 5f, ScreenMessageStyle.UPPER_LEFT);
-                    }
-                    else
-                    {
-                        ChatWindow.Singleton.ScrollToBottom();
-                    }
-
-                    ChatMessages.Enqueue(chatMsg);
+                    LunaScreenMsg.PostScreenMessage($"{chatMsg.Item1}: {chatMsg.Item2}", 5f, ScreenMessageStyle.UPPER_LEFT);
                 }
+                else
+                {
+                    ChatWindow.Singleton.ScrollToBottom();
+                }
+
+                ChatMessages.Enqueue(chatMsg);
             }
+        }
+
+        private void OnNakamaMessageReceived(int opCode, string data)
+        {
+            if (opCode != 2 || string.IsNullOrEmpty(data))
+                return;
+
+            var chatMessage = Json.Deserialize<NakamaChatMessage>(data);
+            if (chatMessage == null || string.IsNullOrEmpty(chatMessage.message))
+                return;
+
+            var sender = string.IsNullOrEmpty(chatMessage.sender) ? SettingsSystem.ServerSettings.ConsoleIdentifier : chatMessage.sender;
+            NewChatMessages.Enqueue(new Tuple<string, string, string>(sender, chatMessage.message, $"{sender}: {chatMessage.message}"));
         }
 
         #endregion

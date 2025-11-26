@@ -47,7 +47,7 @@
 - [x] Based on tasks instead of threads.
 - [x] Supports career and science modes (funds, science, strategies, etc are shared between all players).
 - [x] Cached [QuickLZ](http://www.quicklz.com) for fast compression without generating garbage.
-- [ ] Support for groups/companies inside career and science modes.
+- [ ] Support for groups/companies inside career and science modes _(server-side Nakama handlers are live; client UI + testing pending)._ 
 
 Please check the [wiki](../../wiki) to see how to [install](../../wiki/How-to-install-LMP), [run](../../wiki/How-to-play-with-LMP), [build](../../wiki/How-to-compile-LMP) or [debug](../../wiki/Debugging-in-Visual-studio) LMP among other things
 

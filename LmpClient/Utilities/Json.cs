@@ -2,6 +2,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
+using System.Reflection;
 using System.Text;
 
 namespace LmpClient.Utilities
@@ -62,6 +63,70 @@ namespace LmpClient.Utilities
                 LunaLog.LogError(ex.ToString());
                 return null;
             }
+        }
+        /// <summary>
+        ///     Parses the string json into a strongly typed object.
+        ///     Note: This is a very basic implementation that only supports public fields and properties.
+        ///     It relies on the existing Deserialize(string) method which returns Dictionary/List/Primitives.
+        /// </summary>
+        public static T Deserialize<T>(string json) where T : new()
+        {
+            var obj = Deserialize(json);
+            if (obj == null) return default(T);
+
+            if (obj is Dictionary<string, object> dict)
+            {
+                var result = new T();
+                var type = typeof(T);
+
+                foreach (var kvp in dict)
+                {
+                    var field = type.GetField(kvp.Key, BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase);
+                    if (field != null)
+                    {
+                        var value = ConvertValue(kvp.Value, field.FieldType);
+                        field.SetValue(result, value);
+                        continue;
+                    }
+
+                    var prop = type.GetProperty(kvp.Key, BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase);
+                    if (prop != null && prop.CanWrite)
+                    {
+                        var value = ConvertValue(kvp.Value, prop.PropertyType);
+                        prop.SetValue(result, value, null);
+                    }
+                }
+                return result;
+            }
+
+            return default(T);
+        }
+
+        private static object ConvertValue(object value, Type targetType)
+        {
+            if (value == null) return null;
+
+            if (targetType.IsAssignableFrom(value.GetType()))
+                return value;
+
+            if (targetType == typeof(long) && value is int i) return (long)i;
+            if (targetType == typeof(int) && value is long l) return (int)l;
+            if (targetType == typeof(float) && value is double d) return (float)d;
+            if (targetType == typeof(double) && value is float f) return (double)f;
+
+            // Handle Lists
+            if (value is List<object> list && targetType.IsGenericType && targetType.GetGenericTypeDefinition() == typeof(List<>))
+            {
+                var itemType = targetType.GetGenericArguments()[0];
+                var resultList = (IList)Activator.CreateInstance(targetType);
+                foreach (var item in list)
+                {
+                    resultList.Add(ConvertValue(item, itemType));
+                }
+                return resultList;
+            }
+
+            return Convert.ChangeType(value, targetType);
         }
 
         /// <summary>
@@ -537,11 +602,46 @@ namespace LmpClient.Utilities
                 {
                     _builder.Append(Convert.ToDouble(value).ToString("R"));
                 }
-                else
+                else if (!TrySerializeComplexObject(value))
                 {
                     SerializeString(value.ToString());
                 }
             }
+            private bool TrySerializeComplexObject(object value)
+            {
+                if (value == null)
+                    return false;
+
+                if (value is string || value is DateTime)
+                    return false;
+
+                var type = value.GetType();
+                if (type.IsPrimitive || value is decimal)
+                    return false;
+
+                if (value is IList || value is IDictionary)
+                    return false;
+
+                var dict = new Dictionary<string, object>();
+
+                foreach (var field in type.GetFields(BindingFlags.Public | BindingFlags.Instance))
+                {
+                    dict[field.Name] = field.GetValue(value);
+                }
+
+                foreach (var prop in type.GetProperties(BindingFlags.Public | BindingFlags.Instance))
+                {
+                    if (prop.CanRead && prop.GetIndexParameters().Length == 0)
+                    {
+                        dict[prop.Name] = prop.GetValue(value, null);
+                    }
+                }
+
+                SerializeObject(dict);
+                return true;
+            }
+
+
 
             private void SerializeString(string str)
             {

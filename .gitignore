@@ -31,3 +31,4 @@ LmpGlobal/*.csproj.user
 
 Server/packages
 .nuget/
+Build/
