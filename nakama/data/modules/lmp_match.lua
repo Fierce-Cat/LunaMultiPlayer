@@ -23,6 +23,8 @@ local OP_VESSEL = 10
 local OP_VESSEL_PROTO = 11
 local OP_VESSEL_UPDATE = 12
 local OP_VESSEL_REMOVE = 13
+local OP_MOD_DATA = 26
+local OP_ADMIN_COMMAND = 27
 local OP_KERBAL = 20
 local OP_SETTINGS = 30
 local OP_WARP = 40
@@ -385,6 +387,10 @@ function process_message(context, dispatcher, state, message)
         handle_scenario(context, dispatcher, state, sender, parsed_data)
     elseif op_code == OP_ADMIN then
         handle_admin(context, dispatcher, state, sender, parsed_data)
+    elseif op_code == OP_MOD_DATA then
+        handle_mod_data(context, dispatcher, state, sender, parsed_data)
+    elseif op_code == OP_ADMIN_COMMAND then
+        handle_admin_command(context, dispatcher, state, sender, parsed_data)
     -- Phase 4: Group System
     elseif op_code == OP_GROUP_CREATE or op_code == OP_GROUP_REMOVE or 
            op_code == OP_GROUP_UPDATE or op_code == OP_GROUP_LIST then
@@ -996,6 +1002,85 @@ function handle_scenario(context, dispatcher, state, sender, data)
     else
         -- Unknown scenario type, just broadcast
         dispatcher.broadcast_message(OP_SCENARIO, json.encode(data), nil, sender)
+    end
+end
+
+--------------------------------------------------------------------------------
+-- Mod Data System
+--------------------------------------------------------------------------------
+
+function handle_mod_data(context, dispatcher, state, sender, data)
+    -- Simple relay of mod data to other clients
+    if not data then return end
+    
+    -- Broadcast to all other players (exclude sender)
+    -- The data payload is passed through as-is
+    dispatcher.broadcast_message(OP_MOD_DATA, json.encode(data), nil, sender)
+end
+
+function handle_admin_command(context, dispatcher, state, sender, data)
+    if not data or not data.command then
+        return
+    end
+    
+    -- Check if sender is admin
+    if not is_admin(state, sender.session_id) then
+        nk.logger_warn(string.format("Unauthorized admin command from %s: %s",
+            sender.username, data.command))
+        return
+    end
+    
+    local command = data.command
+    
+    if command == "DEKESSLER" then
+        -- Remove all debris
+        local removed_count = 0
+        local vessels_to_remove = {}
+        
+        for vessel_id, vessel in pairs(state.vessels) do
+            if vessel.vessel_type == "Debris" then
+                table.insert(vessels_to_remove, vessel_id)
+            end
+        end
+        
+        for _, vessel_id in ipairs(vessels_to_remove) do
+            state.vessels[vessel_id] = nil
+            removed_count = removed_count + 1
+            
+            -- Broadcast removal
+            local remove_msg = json.encode({
+                vessel_id = vessel_id,
+                removed_by = sender.session_id,
+            })
+            dispatcher.broadcast_message(OP_VESSEL_REMOVE, remove_msg)
+        end
+        
+        nk.logger_info(string.format("Admin %s executed DEKESSLER (removed %d vessels)",
+            sender.username, removed_count))
+            
+    elseif command == "NUKE" then
+        -- Remove ALL vessels
+        local removed_count = 0
+        local vessels_to_remove = {}
+        
+        for vessel_id, _ in pairs(state.vessels) do
+            table.insert(vessels_to_remove, vessel_id)
+        end
+        
+        for _, vessel_id in ipairs(vessels_to_remove) do
+            state.vessels[vessel_id] = nil
+            removed_count = removed_count + 1
+            
+            -- Broadcast removal
+            local remove_msg = json.encode({
+                vessel_id = vessel_id,
+                removed_by = sender.session_id,
+            })
+            dispatcher.broadcast_message(OP_VESSEL_REMOVE, remove_msg)
+        end
+        
+        nk.logger_info(string.format("Admin %s executed NUKE (removed %d vessels)",
+            sender.username, removed_count))
     end
 end
 
