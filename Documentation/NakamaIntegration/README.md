@@ -9,7 +9,7 @@
 | **Phase 2.2** | Lidgren Adapter | ✅ Complete | - |
 | **Phase 2.3** | Nakama Adapter | ✅ Complete | 22 tests |
 | **Phase 3** | Server-Side Logic | ✅ Complete | - |
-| **Phase 4** | Social Features | ⏳ Pending | - |
+| **Phase 4** | LMP Feature Migration | ⏳ Pending | - |
 | **Phase 5** | Production Deployment | ⏳ Pending | - |
 
 **Total Tests:** 31 (all passing)
@@ -50,10 +50,10 @@
 | **ScenarioSystem** | Science, funds, reputation | ✅ | Full career mode support |
 | **ShareProgress** | Tech tree, contracts, facilities | ✅ | Full progress sharing |
 | **HandshakeSystem** | Join validation, password, bans | ✅ | Full validation chain |
-| **GroupSystem** | Groups (pending Phase 4) | ⏳ | Will use Nakama groups |
-| **CraftLibrarySystem** | Craft storage | ⏳ | Can use Nakama storage API |
-| **ScreenshotSystem** | Screenshot sharing | ⏳ | Can use Nakama storage API |
-| **FlagSystem** | Flag storage | ⏳ | Can use Nakama storage API |
+| **GroupSystem** | Groups (pending Phase 4) | ⏳ | Player groups via Nakama Storage |
+| **CraftLibrarySystem** | Craft storage (pending Phase 4) | ⏳ | Nakama Storage API |
+| **ScreenshotSystem** | Screenshot sharing (pending Phase 4) | ⏳ | Nakama Storage API |
+| **FlagSystem** | Flag storage (pending Phase 4) | ⏳ | Nakama Storage API |
 | **ModFileSystem** | Mod validation | 🔄 | Placeholder in join validation |
 | **Admin Commands** | Full admin system | ✅ | kick, ban, unban, settings, announce |
 | **Anti-Cheat** | Rate limiting, movement validation | ✅ | Enhanced with ownership checks |
@@ -212,11 +212,12 @@ socket.ReceivedMatchState += matchState => ProcessVesselUpdate(matchState);
 - Migrate persistence to Nakama storage
 - **Risk:** Medium - learning curve, complexity
 
-**Phase 4: Social Features (4-6 weeks)**
-- Add friends, groups, chat
-- Implement leaderboards and achievements
-- Enhanced matchmaking
-- **Risk:** Low - additive features
+**Phase 4: LMP Feature Migration (4-6 weeks)**
+- Migrate GroupSystem (player groups with owner, members, invites)
+- Migrate CraftLibrarySystem (vessel design sharing)
+- Migrate ScreenshotSystem (screenshot sharing)
+- Migrate FlagSystem (custom flags)
+- **Risk:** Low - existing LMP features using Nakama Storage API
 
 **Phase 5: Production Deployment (2-3 weeks)**
 - Deploy geo-distributed cluster
