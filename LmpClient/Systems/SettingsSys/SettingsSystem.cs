@@ -14,7 +14,14 @@ namespace LmpClient.Systems.SettingsSys
 
         public override string SystemName { get; } = nameof(SettingsSystem);
 
-        static SettingsSystem() => CurrentSettings = SettingsReadSaveHandler.ReadSettings();
+        static SettingsSystem()
+        {
+            CurrentSettings = SettingsReadSaveHandler.ReadSettings();
+            if (!string.IsNullOrWhiteSpace(CurrentSettings.NakamaServerKey))
+            {
+                NetworkConnectionFactory.NakamaServerKey = CurrentSettings.NakamaServerKey;
+            }
+        }
 
         protected override void OnDisabled()
         {

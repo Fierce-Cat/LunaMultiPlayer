@@ -1,5 +1,6 @@
 ﻿using Lidgren.Network;
 using LmpClient.Systems.PlayerColorSys;
+using LmpCommon.Enums;
 using System;
 using System.Collections.Generic;
 using UnityEngine;
@@ -29,6 +30,16 @@ namespace LmpClient.Systems.SettingsSys
         public bool AutoExpandMtu { get; set; } = false;
         public float TimeoutSeconds { get; set; } = 15;
         public ServerFilters ServerFilters { get; set; } = new ServerFilters();
+
+        public bool UseLegacyServerBrowser { get; set; } = true;
+
+        public string NakamaHost { get; set; } = "127.0.0.1";
+        public int NakamaPort { get; set; } = 7350;
+        public bool NakamaUseSsl { get; set; } = false;
+        public string NakamaServerKey { get; set; } = "defaultkey";
+        public string NakamaDeviceId { get; set; } = string.Empty;
+        public NakamaMatchFilterSettings NakamaMatchFilters { get; set; } = new NakamaMatchFilterSettings();
+        public NakamaMatchDefaults NakamaMatchDefaults { get; set; } = new NakamaMatchDefaults();
 
         public string CustomMasterServer { get; set; } = "";
 
@@ -65,5 +76,26 @@ namespace LmpClient.Systems.SettingsSys
         public bool HideFullServers { get; set; } = true;
         public bool HideEmptyServers { get; set; } = false;
         public bool DedicatedServersOnly { get; set; } = false;
+    }
+
+    [Serializable]
+    public class NakamaMatchFilterSettings
+    {
+        public bool HideFull { get; set; } = true;
+        public bool HideEmpty { get; set; } = false;
+        public string Search { get; set; } = string.Empty;
+        public string Mode { get; set; } = string.Empty;
+        public string Warp { get; set; } = string.Empty;
+    }
+
+    [Serializable]
+    public class NakamaMatchDefaults
+    {
+        public string Name { get; set; } = "LMP Server";
+        public string Description { get; set; } = string.Empty;
+        public string Password { get; set; } = string.Empty;
+        public string Mode { get; set; } = GameMode.Sandbox.ToString();
+        public string Warp { get; set; } = WarpMode.Subspace.ToString();
+        public int MaxPlayers { get; set; } = 16;
     }
 }

@@ -1,7 +1,9 @@
+using LmpClient.Systems.Nakama;
 using LmpCommon.Network;
 using Nakama;
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
@@ -26,6 +28,8 @@ namespace LmpClient.Network.Adapters
         // Nakama SDK types
         private Client _client;
         private ISocket _socket;
+        private NakamaMatchSelection _pendingMatchSelection;
+
         private ISession _session;
         private IMatch _currentMatch;
 
@@ -104,12 +108,31 @@ namespace LmpClient.Network.Adapters
                 return false;
             }
 
+            _pendingMatchSelection = null;
             _lastHostname = hostname;
             _lastPort = port;
             _lastPassword = password;
 
             return await ConnectInternalAsync(hostname, port, password);
         }
+        public async Task<bool> ConnectToMatchAsync(NakamaMatchSelection selection)
+        {
+            if (selection == null)
+                throw new ArgumentNullException(nameof(selection));
+
+            var host = string.IsNullOrWhiteSpace(selection.Host) ? _lastHostname ?? "localhost" : selection.Host;
+            var port = selection.Port > 0 ? selection.Port : (_lastPort > 0 ? _lastPort : 7350);
+            var password = selection.Password ?? string.Empty;
+
+            _pendingMatchSelection = selection;
+            _lastHostname = host;
+            _lastPort = port;
+            _lastPassword = password;
+
+            return await ConnectInternalAsync(host, port, password);
+        }
+
+
 
         /// <inheritdoc />
         public async Task<bool> ConnectAsync(IPEndPoint[] endpoints, string password = "")
@@ -493,9 +516,27 @@ namespace LmpClient.Network.Adapters
         /// <returns>The joined match, or null if failed</returns>
         private async Task<IMatch> JoinOrCreateMatchAsync(string matchLabel)
         {
-            // For now, we'll just create a match or join if we have an ID
-            // In a real implementation, we might list matches or use the RPC to find a match
-            
+            if (_pendingMatchSelection != null)
+            {
+                var selection = _pendingMatchSelection;
+                _pendingMatchSelection = null;
+                try
+                {
+                    var metadata = new Dictionary<string, string>();
+                    if (!string.IsNullOrEmpty(selection.MatchToken))
+                        metadata["token"] = selection.MatchToken;
+                    if (!string.IsNullOrEmpty(selection.Password))
+                        metadata["password"] = selection.Password;
+
+                    return await _socket.JoinMatchAsync(selection.MatchId, metadata.Count > 0 ? metadata : null);
+                }
+                catch (Exception ex)
+                {
+                    LunaLog.LogError($"[Nakama] Error joining match {selection.MatchId}: {ex.Message}");
+                    throw;
+                }
+            }
+
             // If matchLabel looks like a UUID, try to join it directly
             if (Guid.TryParse(matchLabel, out _))
             {
@@ -509,28 +550,8 @@ namespace LmpClient.Network.Adapters
                 }
             }
 
-            // TODO: Implement proper match listing/finding logic
-            // For now, we'll create a new match which is authoritative
-            // Note: In Nakama, clients usually don't create authoritative matches directly
-            // They usually call an RPC which creates the match on the server
-            
-            // Placeholder: Just create a client-relayed match for testing if auth match fails
-            // or if we want to test p2p-like functionality (though LMP is server-authoritative)
-            
-            // Ideally, we should call an RPC:
-            // var payload = "{\"label\": \"" + matchLabel + "\"}";
-            // var rpcResult = await _client.RpcAsync(_session, "create_match", payload);
-            // var matchId = rpcResult.Payload;
-            // return await _socket.JoinMatchAsync(matchId);
-
-            // For this task, we'll assume there's a "create_match" RPC or similar, 
-            // OR we just create a match. 
-            // Since we don't have the server-side Lua/Go code, we'll try to create a match.
-            
             try 
             {
-                // This creates a client-relayed match. 
-                // For authoritative match, we need server-side logic.
                 return await _socket.CreateMatchAsync();
             }
             catch (Exception ex)

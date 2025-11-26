@@ -1,5 +1,7 @@
+using LmpCommon.Enums;
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 
 namespace LmpClient.Systems.Nakama
 {
@@ -190,5 +192,105 @@ namespace LmpClient.Systems.Nakama
         public string username;
         public string session_id;
         public object status;
+    }
+
+    [Serializable]
+    public class NakamaMatchLabel
+    {
+        public string server_name;
+        public string description;
+        public string mode;
+        public string warp;
+        public bool password;
+        public string version;
+        public string region;
+        public string host;
+        public int port;
+        public int max_players;
+        public int players;
+        public string name;
+        public string status;
+    }
+
+    [Serializable]
+    public class NakamaMatchSummary
+    {
+        public string MatchId { get; set; } = string.Empty;
+        public string Name { get; set; } = string.Empty;
+        public string Description { get; set; } = string.Empty;
+        public GameMode? GameMode { get; set; }
+            = null;
+        public WarpMode? WarpMode { get; set; }
+            = null;
+        public int CurrentPlayers { get; set; }
+        public int MaxPlayers { get; set; }
+        public bool HasPassword { get; set; }
+        public string Region { get; set; } = string.Empty;
+        public string Hostname { get; set; } = string.Empty;
+        public int Port { get; set; }
+        public bool UseSsl { get; set; }
+        public string LabelJson { get; set; } = string.Empty;
+        public NakamaMatchLabel Label { get; set; }
+        public string ModeDisplay => GameMode?.ToString() ?? Label?.mode ?? string.Empty;
+        public string WarpDisplay => WarpMode?.ToString() ?? Label?.warp ?? string.Empty;
+        public bool IsFull => MaxPlayers > 0 && CurrentPlayers >= MaxPlayers;
+        public bool IsEmpty => CurrentPlayers <= 0;
+    }
+
+    [Serializable]
+    public class NakamaMatchFilters
+    {
+        public bool HideFull { get; set; } = true;
+        public bool HideEmpty { get; set; } = false;
+        public string Search { get; set; } = string.Empty;
+        public string Mode { get; set; } = string.Empty;
+        public string Warp { get; set; } = string.Empty;
+    }
+
+    [Serializable]
+    public class NakamaMatchSelection
+    {
+        public NakamaMatchSummary Summary { get; set; }
+        public string Password { get; set; } = string.Empty;
+        public string MatchToken { get; set; } = string.Empty;
+
+        public string Host => Summary?.Hostname ?? string.Empty;
+        public int Port => Summary?.Port ?? 0;
+        public bool UseSsl => Summary?.UseSsl ?? false;
+        public string MatchId => Summary?.MatchId ?? string.Empty;
+    }
+
+    [Serializable]
+    public class NakamaMatchCreateRequest
+    {
+        public string name;
+        public string description;
+        public string password;
+        public string mode;
+        public string warp;
+        public int max_players;
+        public bool listed = true;
+    }
+
+    [Serializable]
+    public class NakamaMatchCreateResponse
+    {
+        public string match_id;
+        public string token;
+
+        public bool IsValid => !string.IsNullOrEmpty(match_id);
+    }
+
+    [Serializable]
+    public class NakamaMatchRpcResponse
+    {
+        public List<NakamaMatchRpcEntry> servers = new List<NakamaMatchRpcEntry>();
+    }
+
+    [Serializable]
+    public class NakamaMatchRpcEntry
+    {
+        public string match_id;
+        public NakamaMatchLabel label = new NakamaMatchLabel();
     }
 }

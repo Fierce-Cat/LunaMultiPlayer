@@ -1,6 +1,8 @@
 ﻿using Lidgren.Network;
 using LmpClient.Base;
 using LmpClient.ModuleStore.Patching;
+using LmpClient.Network.Adapters;
+using LmpClient.Systems.Nakama;
 using LmpClient.Systems.Network;
 using LmpCommon;
 using LmpCommon.Enums;
@@ -58,7 +60,7 @@ namespace LmpClient.Network
             if (endpoints.Length == 0)
             {
                 MainSystem.Singleton.Status = "Hostname resolution failed, check for typos";
-                LunaLog.LogError($"[LMP]: Hostname resolution failed, check for typos");
+                LunaLog.LogError("[LMP]: Hostname resolution failed, check for typos");
                 Disconnect("Hostname resolution failed");
             }
             ConnectToServer(endpoints, password);
@@ -91,9 +93,9 @@ namespace LmpClient.Network
                         var client = NetworkMain.ClientConnection;
 
                         client.Start();
-    
+
                         var connected = client.ConnectAsync(new[] { endpoint }, password).Result;
-    
+
                         if (connected)
                         {
                             LunaLog.Log($"[LMP]: Connected to {endpoint.Address}:{endpoint.Port}");
@@ -115,6 +117,62 @@ namespace LmpClient.Network
                 if (MainSystem.NetworkState < ClientState.Connected)
                 {
                     Disconnect(MainSystem.NetworkState == ClientState.Connecting ? "Initial connection timeout" : "Cancelled connection");
+                }
+            });
+        }
+
+        public static void ConnectToMatch(NakamaMatchSelection selection)
+        {
+            if (selection?.Summary == null)
+            {
+                MainSystem.Singleton.Status = "Invalid match selection";
+                LunaLog.LogError("[LMP]: Invalid Nakama match selection");
+                return;
+            }
+
+            if (!(NetworkMain.ClientConnection is NakamaNetworkConnection nakamaConnection))
+            {
+                MainSystem.Singleton.Status = "Nakama backend not available";
+                LunaLog.LogError("[LMP]: Nakama backend not enabled. Cannot join match.");
+                return;
+            }
+
+            if (MainSystem.NetworkState > ClientState.Disconnected)
+                return;
+
+            MainSystem.NetworkState = ClientState.Connecting;
+
+            SystemBase.TaskFactory.StartNew(() =>
+            {
+                while (!PartModuleRunner.Ready)
+                {
+                    MainSystem.Singleton.Status = $"Patching part modules (runs on every restart). {PartModuleRunner.GetPercentage()}%";
+                    Thread.Sleep(50);
+                }
+
+                try
+                {
+                    MainSystem.Singleton.Status = $"Joining match {selection.Summary.Name}";
+                    LunaLog.Log($"[LMP]: Joining Nakama match {selection.MatchId}");
+
+                    nakamaConnection.Start();
+                    var connected = nakamaConnection.ConnectToMatchAsync(selection).Result;
+
+                    if (connected)
+                    {
+                        LunaLog.Log($"[LMP]: Joined Nakama match {selection.MatchId}");
+                        MainSystem.NetworkState = ClientState.Connected;
+                    }
+                    else
+                    {
+                        LunaLog.LogError("[LMP]: Unable to join Nakama match");
+                        nakamaConnection.Disconnect("Failed to join match");
+                        Disconnect("Failed to join match");
+                    }
+                }
+                catch (Exception e)
+                {
+                    NetworkMain.HandleDisconnectException(e);
                 }
             });
         }
