@@ -34,6 +34,8 @@ namespace LmpClient.Systems.Nakama
 
         private NakamaMatchService()
         {
+            NakamaAssemblyResolver.Register();
+
             var storedFilters = SettingsSystem.CurrentSettings?.NakamaMatchFilters;
             _filters = storedFilters != null
                 ? new NakamaMatchFilters
@@ -345,7 +347,8 @@ namespace LmpClient.Systems.Nakama
                 ? NetworkConnectionFactory.NakamaServerKey
                 : settings.NakamaServerKey;
 
-            var client = new Client(scheme, host, port, serverKey);
+            var adapter = new KspHttpRequestAdapter();
+            var client = new Client(scheme, host, port, serverKey, adapter, false);
             var deviceId = EnsureDeviceId(settings);
             var session = await client.AuthenticateDeviceAsync(deviceId).ConfigureAwait(false);
             token.ThrowIfCancellationRequested();
