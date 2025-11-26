@@ -30,4 +30,8 @@ Server/*.csproj.user
 LmpGlobal/*.csproj.user
 
 Server/packages
+<<<<<<< HEAD
 Build/
+=======
+.nuget/
+>>>>>>> 0bef709d6c6375dd10aaf73016d098e01a3f6ebf

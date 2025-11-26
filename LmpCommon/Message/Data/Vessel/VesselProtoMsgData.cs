@@ -1,5 +1,6 @@
 ﻿using Lidgren.Network;
 using LmpCommon.Message.Types;
+using System;
 
 namespace LmpCommon.Message.Data.Vessel
 {
@@ -38,7 +39,12 @@ namespace LmpCommon.Message.Data.Vessel
 
             lidgrenMsg.ReadBytes(Data, 0, NumBytes);
 
-            Common.ThreadSafeDecompress(this, ref Data, NumBytes, out NumBytes);
+            if (!Common.ThreadSafeDecompress(this, ref Data, NumBytes, out NumBytes))
+            {
+                // Decompression failed - data is corrupted
+                NumBytes = 0;
+                Data = Array.Empty<byte>();
+            }
         }
 
         internal override int InternalGetMessageSize()

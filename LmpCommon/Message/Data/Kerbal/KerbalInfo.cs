@@ -1,5 +1,6 @@
 ﻿using Lidgren.Network;
 using LmpCommon.Message.Base;
+using System;
 
 namespace LmpCommon.Message.Data.Kerbal
 {
@@ -29,7 +30,12 @@ namespace LmpCommon.Message.Data.Kerbal
 
             lidgrenMsg.ReadBytes(KerbalData, 0, NumBytes);
 
-            Common.ThreadSafeDecompress(this, ref KerbalData, NumBytes, out NumBytes);
+            if (!Common.ThreadSafeDecompress(this, ref KerbalData, NumBytes, out NumBytes))
+            {
+                // Decompression failed - data is corrupted
+                NumBytes = 0;
+                KerbalData = Array.Empty<byte>();
+            }
         }
 
         public int GetByteCount()

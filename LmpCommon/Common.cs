@@ -21,17 +21,52 @@ namespace LmpCommon
             }
         }
 
-        public static void ThreadSafeDecompress(object lockObj, ref byte[] data, int length, out int numBytes)
+        /// <summary>
+        /// QuickLZ magic byte that indicates compressed data
+        /// </summary>
+        private const byte QlzMagicByte = 0x4E;
+
+        /// <summary>
+        /// Decompresses data in a thread-safe manner
+        /// </summary>
+        /// <param name="lockObj">Object to lock on for thread safety</param>
+        /// <param name="data">Reference to data array - will be replaced with decompressed data</param>
+        /// <param name="length">Length of compressed data</param>
+        /// <param name="numBytes">Output: length of decompressed data, or 0 if decompression failed</param>
+        /// <returns>True if decompression succeeded or data was not compressed; False if data appears corrupted</returns>
+        public static bool ThreadSafeDecompress(object lockObj, ref byte[] data, int length, out int numBytes)
         {
             lock (lockObj)
             {
                 if (CachedQlz.IsCompressed(data, length))
                 {
-                    CachedQlz.Decompress(ref data, out numBytes);
+                    try
+                    {
+                        CachedQlz.Decompress(ref data, out numBytes);
+                        return true;
+                    }
+                    catch (ArgumentException)
+                    {
+                        // Decompression failed - data is corrupted (array bounds or parameter issues)
+                        numBytes = 0;
+                        return false;
+                    }
                 }
                 else
                 {
+                    // Check if data looks like it should be compressed but IsCompressed returned false
+                    // This happens when compressed data is truncated/corrupted
+                    if (length > 0 && data.Length > 0 && data[0] == QlzMagicByte)
+                    {
+                        // Data starts with QLZ magic byte but IsCompressed returned false
+                        // This indicates the compressed data is corrupted (likely truncated)
+                        numBytes = 0;
+                        return false;
+                    }
+
+                    // Data is not compressed
                     numBytes = length;
+                    return true;
                 }
             }
         }
