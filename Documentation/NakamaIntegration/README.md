@@ -43,25 +43,35 @@
 
 ### Feature Comparison: Original LMP Server vs. Nakama
 
-| Original LMP System | Nakama Implementation | Status | Notes |
-|--------------------|----------------------|--------|-------|
-| **WarpSystem** | Warp control (subspace, MCU, admin) | ✅ | Full parity with KSP warp rates |
-| **LockSystem** | Lock acquire/release with ownership | ✅ | Control, update, spectator locks |
-| **KerbalSystem** | Kerbal sync with attributes | ✅ | Name, experience, courage, stupidity, status |
-| **VesselDataUpdater** | Vessel proto + position updates | ✅ | Anti-cheat validation included |
-| **VesselStoreSystem** | Vessel state storage | ✅ | Integrated with match state |
-| **TimeSystem** | Universe time with warp modes | ✅ | Server start time tracking |
-| **ScenarioSystem** | Science, funds, reputation | ✅ | Full career mode support |
-| **ShareProgress** | Tech tree, contracts, facilities | ✅ | Full progress sharing |
-| **HandshakeSystem** | Join validation, password, bans | ✅ | Full validation chain |
-| **GroupSystem** | Player groups | ✅ | Via Nakama Storage, full parity |
-| **CraftLibrarySystem** | Craft sharing | ✅ | Via Nakama Storage, rate limited |
-| **ScreenshotSystem** | Screenshot sharing | ✅ | Via Nakama Storage, rate limited |
-| **FlagSystem** | Custom flags | ✅ | Via Nakama Storage, validated |
-| **ModFileSystem** | Mod validation | 🔄 | Placeholder in join validation |
-| **Admin Commands** | Full admin system | ✅ | kick, ban, unban, settings, announce |
-| **Anti-Cheat** | Rate limiting, movement validation | ✅ | Enhanced with ownership checks |
-| **Persistence** | File-based | ✅ | Nakama storage (PostgreSQL) |
+| Legacy System | Legacy Location | Nakama Implementation | Status | Remaining Work |
+|---------------|----------------|-----------------------|--------|----------------|
+| **WarpSystem** | `Server/System/WarpSystem.cs` | `handle_warp` (`nakama/data/modules/lmp_match.lua`) covers subspace, MCU, admin modes | ✅ | Client UX still needs toggles for MCU/admin enforcement and additional soak testing. |
+| **LockSystem** | `Server/System/LockSystem.cs` | `handle_lock` + lock map stored in match state | ✅ | Add audit logging/metrics for contested locks. |
+| **KerbalSystem** | `Server/System/KerbalSystem.cs` | `handle_kerbal` maintains kerbal attributes in match state | ✅ | None (parity verified). |
+| **VesselDataUpdater** | `Server/System/Vessel/VesselDataUpdater.cs` | `handle_vessel_update` with rate limiting + physics sanity checks | ✅ | Extend strike/penalty flow for repeated violations. |
+| **VesselStoreSystem** | `Server/System/VesselStoreSystem.cs` | `state.vessels` + `handle_vessel`/`handle_vessel_remove` + `save_match_state` | ✅ | Persist owner metadata to support resume-after-crash flows. |
+| **TimeSystem** | `Server/System/TimeSystem.cs` | `update_universe_time` + warp metadata fields | ✅ | Validate MCU slowest-player calculations against large player counts. |
+| **ScenarioSystem** | `Server/System/ScenarioSystem.cs` | `handle_scenario` + shared state fields | ✅ | None. |
+| **ShareProgress** | `Server/System/ShareProgressSystem.cs` | `handle_share_progress` updates science/funds/reputation | ✅ | Add optimistic concurrency tests when multiple players submit simultaneously. |
+| **HandshakeSystem** | `Server/System/HandshakeSystem.cs` | `match_join_attempt`/`match_join` perform password + capacity checks | ✅ | Replace placeholder mod validation + integrate ban list lookups. |
+| **GroupSystem** | `Server/System/GroupSystem*.cs` | `handle_group` + `save_groups`/`load_groups` (lines 1304-1476) | ✅ (server) | Client UI + serialization still pending, keep checkbox open in root README until shipped. |
+| **CraftLibrarySystem** | `Server/System/CraftLibrarySystem.cs` | `handle_craft_library` section with storage-backed upload/download/list/delete | ✅ (server) | Need client adapters + concurrency tests for large craft payloads. |
+| **ScreenshotSystem** | `Server/System/ScreenshotSystem.cs` | `handle_screenshot` upload/list/download logic with rate limits | ✅ (server) | Needs client integration + storage quota policy. |
+| **FlagSystem** | `Server/System/FlagSystem.cs` | `handle_flag` enforces naming rules and broadcasts assets | ✅ (server) | Client import/export workflows still outstanding. |
+| **ModFileSystem** | `Server/System/ModFileSystem.cs` | Only logs metadata inside `match_join_attempt` | 🔄 Partial | Need checksum validation & enforcement prior to allowing joins. |
+| **Admin Commands** | `Server/Message/AdminMsgReader.cs` | `handle_admin` processes ban/kick/settings/announce actions | ✅ | Harden authentication and add per-command audit entries. |
+| **Anti-Cheat** | Spread across `Server/System/Vessel*` | Anti-cheat block + `validate_vessel_movement`/rate limit helpers | ✅ | Hook into strike system + expose metrics. |
+| **Persistence** | File-based saves under `Server/Server` | `save_match_state`/`load_match_state` writing to Nakama `match_saves` collection | ✅ | Expand restore-on-crash flow + scheduled autosaves. |
+
+**Key gaps observed:**
+
+- **Mod compatibility** is still a stub—`match_join_attempt` logs `metadata.mod_list` but the legacy whitelist enforcement from `Server/System/ModFileSystem.cs` has not been replicated.
+- **Phase 4 client plumbing** (Groups, Craft Library, Screenshots, Flags) is unimplemented, so these features are currently server-only.
+- **Production deployment (Phase 5)** remains pending; see [`ProductionDeployment.md`](./ProductionDeployment.md) for the outstanding infrastructure work.
+
+### Passive universe persistence
+
+`save_match_state`/`load_match_state` in `nakama/data/modules/lmp_match.lua` follow Nakama's passive multiplayer guidance by snapshotting the authoritative match state into storage each time an admin triggers a save or the match shuts down. Heroic Labs explicitly recommends persisting match state via `nk.storage_write` for passive matches so that universes can resume after downtime ([Passive multiplayer docs](https://heroiclabs.com/docs/nakama/guides/concepts/passive-multiplayer)). This design ensures the LMP universe survives restarts while keeping the Nakama match passive until players reconnect.
 
 ---
 
