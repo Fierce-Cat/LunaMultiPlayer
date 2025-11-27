@@ -20,6 +20,39 @@ namespace Server.System
                 return true;
             }
 
+            // Special handling for Update lock requests - they can take over from UnloadedUpdate locks
+            // This implements the behavior documented in LockType.cs where a player with a loaded vessel
+            // (running physics) should have priority over a player with an unloaded vessel
+            if (lockDef.Type == LockType.Update)
+            {
+                // Case 1: Update lock already exists - another player has vessel loaded
+                // First loader keeps priority, deny the request
+                if (LockQuery.UpdateLockExists(lockDef.VesselId))
+                {
+                    return false;
+                }
+
+                // Case 2: Only UnloadedUpdate lock exists - owner has vessel unloaded
+                // Requester has vessel loaded, they should get priority
+                if (LockQuery.UnloadedUpdateLockExists(lockDef.VesselId))
+                {
+                    // Grant Update lock to requester
+                    LockStore.AddOrUpdateLock(lockDef);
+
+                    // Also grant UnloadedUpdate lock to requester (Update owner should have both)
+                    LockStore.AddOrUpdateLock(new LockDefinition(
+                        LockType.UnloadedUpdate,
+                        lockDef.PlayerName,
+                        lockDef.VesselId));
+
+                    return true;
+                }
+
+                // Case 3: No locks exist - grant the Update lock
+                LockStore.AddOrUpdateLock(lockDef);
+                return true;
+            }
+
             if (force || !LockQuery.LockExists(lockDef))
             {
                 if (lockDef.Type == LockType.Control)

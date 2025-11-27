@@ -72,11 +72,17 @@ namespace LmpClient.Systems.VesselLockSys
         }
 
         /// <summary>
-        /// When a vessel gets loaded try to acquire it's update lock if we can
+        /// When a vessel gets loaded try to acquire its update lock if we can.
+        /// This will take over from UnloadedUpdate lock holders (e.g., Tracking Station players)
+        /// since a loaded vessel should be controlled by someone with physics simulation.
         /// </summary>
         public void VesselLoaded(Vessel vessel)
         {
-            if (!LockSystem.LockQuery.UpdateLockExists(vessel.id) && !VesselCommon.IsSpectating)
+            if (VesselCommon.IsSpectating) return;
+
+            // Request Update lock if we don't already have it
+            // Server will grant if only UnloadedUpdate exists, deny if Update already exists
+            if (!LockSystem.LockQuery.UpdateLockBelongsToPlayer(vessel.id, SettingsSystem.CurrentSettings.PlayerName))
             {
                 LockSystem.Singleton.AcquireUpdateLock(vessel.id);
             }
