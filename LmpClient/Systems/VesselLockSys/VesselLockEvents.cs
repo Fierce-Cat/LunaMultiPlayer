@@ -20,8 +20,8 @@ namespace LmpClient.Systems.VesselLockSys
             //As that would mean that an spectator could get the control of our vessel while we are reloading it.
             //Therefore we just ignore this whole thing to avoid releasing our locks.
             //Reloading our own current vessel is a bad practice so this case should not happen anyway...
-            // if (LockSystem.LockQuery.GetControlLockOwner(vessel.id) == SettingsSystem.CurrentSettings.PlayerName)
-            //     return;
+            if (LockSystem.LockQuery.GetControlLockOwner(vessel.id) == SettingsSystem.CurrentSettings.PlayerName)
+                return;
 
             //Release all vessel CONTROL locks as we are switching to a NEW vessel.
             LockSystem.Singleton.ReleasePlayerLocks(LockType.Control);

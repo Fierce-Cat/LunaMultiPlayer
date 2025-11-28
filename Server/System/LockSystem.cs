@@ -67,18 +67,11 @@ namespace Server.System
                     //If they acquired a control lock they probably switched vessels or something like that and they can only have one control lock.
                     //So remove the other control locks just for safety...
                     var controlLocks = LockQuery.GetAllPlayerLocks(lockDef.PlayerName)
-                    .Where(l => l.Type == LockType.Control)
-                    .ToArray();
+                    .Where(l => l.Type == LockType.Control);
 
                     foreach (var control in controlLocks)
                     {
-                        // ReleaseLock(control);
-                        //If releaseLock failed, it means the player didn't own the lock anymore
-                        //But since they are acquiring a new control lock, we can just remove it forcefully
-                        if (!ReleaseLock(control))
-                        {
-                            LockStore.RemoveLock(control);
-                        }
+                        ReleaseLock(control);
                     }
                         
                 }
