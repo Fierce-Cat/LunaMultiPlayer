@@ -41,8 +41,36 @@ namespace Server.System
 
         public static void SendLockAcquireMessage(ClientStructure client, LockDefinition lockDefinition, bool force)
         {
+            // Check if this is an Update lock that will take over from an UnloadedUpdate lock
+            LockDefinition releasedUnloadedLock = null;
+            if (lockDefinition.Type == LockType.Update &&
+                LockSystem.LockQuery.UnloadedUpdateLockExists(lockDefinition.VesselId) &&
+                !LockSystem.LockQuery.UpdateLockExists(lockDefinition.VesselId) &&
+                !LockSystem.LockQuery.UnloadedUpdateLockBelongsToPlayer(lockDefinition.VesselId, lockDefinition.PlayerName))
+            {
+                // Store the current UnloadedUpdate lock holder so we can notify about the release
+                releasedUnloadedLock = LockSystem.LockQuery.GetUnloadedUpdateLock(lockDefinition.VesselId);
+            }
+
             if (LockSystem.AcquireLock(lockDefinition, force, out var repeatedAcquire))
             {
+                // If we took over from UnloadedUpdate, broadcast the release and new acquire
+                if (releasedUnloadedLock != null)
+                {
+                    // Notify about the old owner losing their UnloadedUpdate lock
+                    var releaseMsgData = ServerContext.ServerMessageFactory.CreateNewMessageData<LockReleaseMsgData>();
+                    releaseMsgData.Lock = releasedUnloadedLock;
+                    releaseMsgData.LockResult = true;
+                    MessageQueuer.SendToAllClients<LockSrvMsg>(releaseMsgData);
+                    LunaLog.Debug($"{releasedUnloadedLock.PlayerName} lost UnloadedUpdate lock for vessel {lockDefinition.VesselId} - taken by {lockDefinition.PlayerName}");
+
+                    // Broadcast the new UnloadedUpdate lock ownership
+                    var unloadedUpdateMsgData = ServerContext.ServerMessageFactory.CreateNewMessageData<LockAcquireMsgData>();
+                    unloadedUpdateMsgData.Lock = new LockDefinition(LockType.UnloadedUpdate, lockDefinition.PlayerName, lockDefinition.VesselId);
+                    unloadedUpdateMsgData.Force = false;
+                    MessageQueuer.SendToAllClients<LockSrvMsg>(unloadedUpdateMsgData);
+                }
+
                 var msgData = ServerContext.ServerMessageFactory.CreateNewMessageData<LockAcquireMsgData>();
                 msgData.Lock = lockDefinition;
                 msgData.Force = force;
