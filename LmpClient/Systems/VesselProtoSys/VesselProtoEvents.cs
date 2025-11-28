@@ -120,7 +120,7 @@ namespace LmpClient.Systems.VesselProtoSys
             if (!LockSystem.LockQuery.UpdateLockBelongsToPlayer(partFrom.vessel.id, SettingsSystem.CurrentSettings.PlayerName) &&
                 !LockSystem.LockQuery.UpdateLockBelongsToPlayer(removedVesselId, SettingsSystem.CurrentSettings.PlayerName)) return;
 
-            System.MessageSender.SendVesselMessage(partFrom.vessel);
+            System.MessageSender.SendVesselMessage(partFrom.vessel, forceReload: true);
         }
     }
 }

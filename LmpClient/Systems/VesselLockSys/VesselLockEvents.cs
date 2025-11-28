@@ -20,8 +20,8 @@ namespace LmpClient.Systems.VesselLockSys
             //As that would mean that an spectator could get the control of our vessel while we are reloading it.
             //Therefore we just ignore this whole thing to avoid releasing our locks.
             //Reloading our own current vessel is a bad practice so this case should not happen anyway...
-            if (LockSystem.LockQuery.GetControlLockOwner(vessel.id) == SettingsSystem.CurrentSettings.PlayerName)
-                return;
+            // if (LockSystem.LockQuery.GetControlLockOwner(vessel.id) == SettingsSystem.CurrentSettings.PlayerName)
+            //     return;
 
             //Release all vessel CONTROL locks as we are switching to a NEW vessel.
             LockSystem.Singleton.ReleasePlayerLocks(LockType.Control);
@@ -72,11 +72,17 @@ namespace LmpClient.Systems.VesselLockSys
         }
 
         /// <summary>
-        /// When a vessel gets loaded try to acquire it's update lock if we can
+        /// When a vessel gets loaded try to acquire its update lock if we can.
+        /// This will take over from UnloadedUpdate lock holders (e.g., Tracking Station players)
+        /// since a loaded vessel should be controlled by someone with physics simulation.
         /// </summary>
         public void VesselLoaded(Vessel vessel)
         {
-            if (!LockSystem.LockQuery.UpdateLockExists(vessel.id) && !VesselCommon.IsSpectating)
+            if (VesselCommon.IsSpectating) return;
+
+            // Request Update lock if we don't already have it
+            // Server will grant if only UnloadedUpdate exists, deny if Update already exists
+            if (!LockSystem.LockQuery.UpdateLockBelongsToPlayer(vessel.id, SettingsSystem.CurrentSettings.PlayerName))
             {
                 LockSystem.Singleton.AcquireUpdateLock(vessel.id);
             }
