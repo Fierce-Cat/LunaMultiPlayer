@@ -26,14 +26,21 @@ namespace Server.System
             if (lockDef.Type == LockType.Update)
             {
                 // Case 1: Update lock already exists - another player has vessel loaded
-                // First loader keeps priority, deny the request
                 if (LockQuery.UpdateLockExists(lockDef.VesselId))
                 {
+                    // IMPORTANT: Allow force=true to override (needed for Control lock cascade)
+                    // When a player takes Control of a vessel, they must be able to take the Update lock
+                    if (force)
+                    {
+                        LockStore.AddOrUpdateLock(lockDef);
+                        return true;
+                    }
+                    // Deny without force (first loader keeps priority)
                     return false;
                 }
 
                 // Case 2: Only UnloadedUpdate lock exists - owner has vessel unloaded
-                // Requester has vessel loaded, they should get priority
+                // Requester has vessel loaded, they should get priority (loaded vessel takes over)
                 if (LockQuery.UnloadedUpdateLockExists(lockDef.VesselId))
                 {
                     // Grant Update lock to requester
@@ -48,9 +55,7 @@ namespace Server.System
                     return true;
                 }
 
-                // Case 3: No locks exist - grant the Update lock
-                LockStore.AddOrUpdateLock(lockDef);
-                return true;
+                // Case 3: No locks exist - fall through to standard logic below
             }
 
             if (force || !LockQuery.LockExists(lockDef))
