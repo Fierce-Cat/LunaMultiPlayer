@@ -55,7 +55,9 @@ namespace Server.System
                     return true;
                 }
 
-                // Case 3: No locks exist - fall through to standard logic below
+                // Case 3: No Update or UnloadedUpdate locks exist - grant the Update lock
+                LockStore.AddOrUpdateLock(lockDef);
+                return true;
             }
 
             if (force || !LockQuery.LockExists(lockDef))
