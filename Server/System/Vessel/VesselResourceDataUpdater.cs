@@ -60,5 +60,10 @@ namespace Server.System.Vessel
                 });
             }
         }
+
+        static partial void CleanupResourceDictionary(Guid vesselId)
+        {
+            LastResourcesUpdateDictionary.TryRemove(vesselId, out _);
+        }
     }
 }

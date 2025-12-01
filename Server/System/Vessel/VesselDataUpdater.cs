@@ -21,6 +21,23 @@ namespace Server.System.Vessel
         /// </summary>
         private static readonly ConcurrentDictionary<Guid, object> Semaphore = new ConcurrentDictionary<Guid, object>();
 
+        /// <summary>
+        /// Clears any cached synchronization objects associated to a vessel when it is removed.
+        /// </summary>
+        public static void CleanupCaches(Guid vesselId)
+        {
+            Semaphore.TryRemove(vesselId, out _);
+            CleanupUpdateDictionary(vesselId);
+            CleanupResourceDictionary(vesselId);
+            CleanupPositionDictionary(vesselId);
+            CleanupFlightStateDictionary(vesselId);
+        }
+
+        static partial void CleanupUpdateDictionary(Guid vesselId);
+        static partial void CleanupResourceDictionary(Guid vesselId);
+        static partial void CleanupPositionDictionary(Guid vesselId);
+        static partial void CleanupFlightStateDictionary(Guid vesselId);
+
         #endregion
 
         /// <summary>

@@ -53,5 +53,10 @@ namespace Server.System.Vessel
                 });
             }
         }
+
+        static partial void CleanupFlightStateDictionary(Guid vesselId)
+        {
+            LastFlightStateUpdateDictionary.TryRemove(vesselId, out _);
+        }
     }
 }

@@ -1,5 +1,6 @@
 ﻿using LunaConfigNode;
 using Server.Context;
+using Server.System.Vessel;
 using System;
 using System.Collections.Concurrent;
 using System.IO;
@@ -28,8 +29,10 @@ namespace Server.System
         public static void RemoveVessel(Guid vesselId)
         {
             CurrentVessels.TryRemove(vesselId, out _);
+            VesselDataUpdater.CleanupCaches(vesselId);
+            VesselContext.RemoveTrackedVessel(vesselId);
 
-            Task.Run(() =>
+            _ = Task.Run(() =>
             {
                 lock (BackupLock)
                 {
