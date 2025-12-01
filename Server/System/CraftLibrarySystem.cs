@@ -20,6 +20,7 @@ namespace Server.System
     {
         public static readonly string CraftPath = Path.Combine(ServerContext.UniverseDirectory, "Crafts");
         private static readonly ConcurrentDictionary<string, DateTime> LastRequest = new ConcurrentDictionary<string, DateTime>();
+        private static readonly TimeSpan RequestTtl = TimeSpan.FromHours(24); // Prevent unbounded growth of rate-limit tracking entries.
 
         #region Public Methods
 
@@ -33,6 +34,8 @@ namespace Server.System
 
             Task.Run(() =>
             {
+                CleanupExpiredRequests();
+
                 var file = Path.Combine(CraftPath, data.CraftToDelete.FolderName, data.CraftToDelete.CraftType.ToString(),
                     $"{data.CraftToDelete.CraftName}.craft");
 
@@ -58,6 +61,8 @@ namespace Server.System
                 {
                     Directory.CreateDirectory(playerFolderType);
                 }
+
+                CleanupExpiredRequests();
 
                 var lastTime = LastRequest.GetOrAdd(client.PlayerName, DateTime.MinValue);
                 if (DateTime.Now - lastTime > TimeSpan.FromMilliseconds(CraftSettings.SettingsStore.MinCraftLibraryRequestIntervalMs))
@@ -108,6 +113,8 @@ namespace Server.System
         {
             Task.Run(() =>
             {
+                CleanupExpiredRequests();
+
                 var msgData = ServerContext.ServerMessageFactory.CreateNewMessageData<CraftLibraryFoldersReplyMsgData>();
                 msgData.Folders = Directory.GetDirectories(CraftPath)
                     .Where(d => Directory.GetFiles(d, "*.craft", SearchOption.AllDirectories).Length > 0)
@@ -128,6 +135,8 @@ namespace Server.System
         {
             Task.Run(() =>
             {
+                CleanupExpiredRequests();
+
                 var crafts = new List<CraftBasicInfo>();
                 var playerFolder = Path.Combine(CraftPath, data.FolderName);
 
@@ -168,6 +177,8 @@ namespace Server.System
         {
             Task.Run(() =>
             {
+                CleanupExpiredRequests();
+
                 var lastTime = LastRequest.GetOrAdd(client.PlayerName, DateTime.MinValue);
                 if (DateTime.Now - lastTime > TimeSpan.FromMilliseconds(CraftSettings.SettingsStore.MinCraftLibraryRequestIntervalMs))
                 {
@@ -239,6 +250,19 @@ namespace Server.System
                     LunaLog.Debug($"Deleting old craft {oldestCraft.FullName}");
                     FileHandler.FileDelete(oldestCraft.FullName);
                 }
+            }
+        }
+
+        /// <summary>
+        /// Prune player request timestamps that have been idle longer than the TTL.
+        /// </summary>
+        private static void CleanupExpiredRequests()
+        {
+            var threshold = DateTime.Now - RequestTtl;
+            foreach (var entry in LastRequest.ToArray())
+            {
+                if (entry.Value < threshold)
+                    LastRequest.TryRemove(entry.Key, out _);
             }
         }
 

@@ -27,6 +27,7 @@ namespace Server.System
         public static readonly string ScreenshotPath = Path.Combine(ServerContext.UniverseDirectory, "Screenshots");
 
         private static readonly ConcurrentDictionary<string, DateTime> LastUploadRequest = new ConcurrentDictionary<string, DateTime>();
+        private static readonly TimeSpan RateLimitTtl = TimeSpan.FromHours(24); // Old player entries age out to keep memory bounded.
 
         #region Public Methods
 
@@ -42,6 +43,8 @@ namespace Server.System
                 {
                     Directory.CreateDirectory(playerFolder);
                 }
+
+                CleanupExpiredRateEntries();
 
                 var lastTime = LastUploadRequest.GetOrAdd(client.PlayerName, DateTime.MinValue);
                 if (DateTime.Now - lastTime > TimeSpan.FromMilliseconds(ScreenshotSettings.SettingsStore.MinScreenshotIntervalMs))
@@ -197,6 +200,21 @@ namespace Server.System
                 {
                     LunaLog.Debug($"Removing oldest screenshot folder {oldestFolder.Name}");
                     Directory.Delete(oldestFolder.FullName, true);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Remove stale entries from the upload rate tracker so the dictionary stays small over time.
+        /// </summary>
+        private static void CleanupExpiredRateEntries()
+        {
+            var threshold = DateTime.Now - RateLimitTtl;
+            foreach (var entry in LastUploadRequest.ToArray())
+            {
+                if (entry.Value < threshold)
+                {
+                    LastUploadRequest.TryRemove(entry.Key, out _);
                 }
             }
         }
