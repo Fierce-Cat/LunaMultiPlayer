@@ -15,10 +15,12 @@ using System.Drawing.Imaging;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using System.Runtime.Versioning;
 using Graphics = System.Drawing.Graphics;
 
 namespace Server.System
 {
+    [SupportedOSPlatform("windows")]
     public class ScreenshotSystem
     {
         private const string SmallFilePrefix = "small_";
@@ -33,7 +35,7 @@ namespace Server.System
         /// </summary>
         public static void SaveScreenshot(ClientStructure client, ScreenshotDataMsgData data)
         {
-            Task.Run(() =>
+            _ = Task.Run(() =>
             {
                 var playerFolder = Path.Combine(ScreenshotPath, client.PlayerName);
                 if (!Directory.Exists(playerFolder))
@@ -85,7 +87,7 @@ namespace Server.System
         /// </summary>
         public static void SendScreenshotFolders(ClientStructure client)
         {
-            Task.Run(() =>
+            _ = Task.Run(() =>
             {
                 var msgData = ServerContext.ServerMessageFactory.CreateNewMessageData<ScreenshotFoldersReplyMsgData>();
                 msgData.Folders = Directory.GetDirectories(ScreenshotPath).Select(d => new DirectoryInfo(d).Name).ToArray();
@@ -102,7 +104,7 @@ namespace Server.System
         /// </summary>
         public static void SendScreenshotList(ClientStructure client, ScreenshotListRequestMsgData data)
         {
-            Task.Run(() =>
+            _ = Task.Run(() =>
             {
                 var screenshots = new List<ScreenshotInfo>();
                 var folder = Path.Combine(ScreenshotPath, data.FolderName);
@@ -115,17 +117,19 @@ namespace Server.System
                         if (data.AlreadyOwnedPhotoIds.Contains(dateTaken))
                             continue;
 
-                        var bitmap = new Bitmap(file);
-                        var contents = File.ReadAllBytes(file);
-                        screenshots.Add(new ScreenshotInfo
+                        using (var bitmap = new Bitmap(file))
                         {
-                            Data = contents,
-                            DateTaken = dateTaken,
-                            NumBytes = contents.Length,
-                            Height = (ushort)bitmap.Height,
-                            Width = (ushort)bitmap.Width,
-                            FolderName = data.FolderName,
-                        });
+                            var contents = File.ReadAllBytes(file);
+                            screenshots.Add(new ScreenshotInfo
+                            {
+                                Data = contents,
+                                DateTaken = dateTaken,
+                                NumBytes = contents.Length,
+                                Height = (ushort)bitmap.Height,
+                                Width = (ushort)bitmap.Width,
+                                FolderName = data.FolderName,
+                            });
+                        }
                     }
                 }
 
@@ -144,23 +148,24 @@ namespace Server.System
         /// </summary>
         public static void SendScreenshot(ClientStructure client, ScreenshotDownloadRequestMsgData data)
         {
-            Task.Run(() =>
+            _ = Task.Run(() =>
             {
                 var file = Path.Combine(ScreenshotPath, data.FolderName, $"{data.DateTaken}.png");
                 if (File.Exists(file))
                 {
-                    var bitmap = new Bitmap(file);
+                    using (var bitmap = new Bitmap(file))
+                    {
+                        var msgData = ServerContext.ServerMessageFactory.CreateNewMessageData<ScreenshotDataMsgData>();
+                        msgData.Screenshot.DateTaken = data.DateTaken;
+                        msgData.Screenshot.Data = File.ReadAllBytes(file);
+                        msgData.Screenshot.NumBytes = msgData.Screenshot.Data.Length;
+                        msgData.Screenshot.Height = (ushort)bitmap.Height;
+                        msgData.Screenshot.Width = (ushort)bitmap.Width;
+                        msgData.Screenshot.FolderName = data.FolderName;
 
-                    var msgData = ServerContext.ServerMessageFactory.CreateNewMessageData<ScreenshotDataMsgData>();
-                    msgData.Screenshot.DateTaken = data.DateTaken;
-                    msgData.Screenshot.Data = File.ReadAllBytes(file);
-                    msgData.Screenshot.NumBytes = msgData.Screenshot.Data.Length;
-                    msgData.Screenshot.Height = (ushort)bitmap.Height;
-                    msgData.Screenshot.Width = (ushort)bitmap.Width;
-                    msgData.Screenshot.FolderName = data.FolderName;
-
-                    LunaLog.Debug($"Sending screenshot ({ByteSize.FromBytes(msgData.Screenshot.NumBytes).KiloBytes}{ByteSize.KiloByteSymbol}): {data.DateTaken} to: {client.PlayerName}.");
-                    MessageQueuer.SendToClient<ScreenshotSrvMsg>(client, msgData);
+                        LunaLog.Debug($"Sending screenshot ({ByteSize.FromBytes(msgData.Screenshot.NumBytes).KiloBytes}{ByteSize.KiloByteSymbol}): {data.DateTaken} to: {client.PlayerName}.");
+                        MessageQueuer.SendToClient<ScreenshotSrvMsg>(client, msgData);
+                    }
                 }
             });
         }
