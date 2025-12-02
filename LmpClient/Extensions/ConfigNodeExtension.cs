@@ -38,5 +38,26 @@ namespace LmpClient.Extensions
 
             return false;
         }
+
+        /// <summary>
+        /// Checks if the vessel config node has an invalid orbit body reference index.
+        /// This prevents ArgumentOutOfRangeException when loading vessels with body indices 
+        /// that reference celestial bodies from mods that aren't installed.
+        /// </summary>
+        public static bool VesselHasInvalidOrbitBodyIndex(this ConfigNode vesselNode, int maxBodyIndex)
+        {
+            var orbitNode = vesselNode.GetNode("ORBIT");
+            if (orbitNode == null)
+                return false;
+
+            var refValue = orbitNode.GetValue("REF");
+            if (string.IsNullOrEmpty(refValue))
+                return false;
+
+            if (!int.TryParse(refValue, out var bodyIndex))
+                return true; // Invalid: not a number
+
+            return bodyIndex < 0 || bodyIndex > maxBodyIndex;
+        }
     }
 }

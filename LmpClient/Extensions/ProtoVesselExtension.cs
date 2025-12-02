@@ -132,18 +132,20 @@ namespace LmpClient.Extensions
                 return false;
             }
 
-            if (protoVessel.situation == Vessel.Situations.FLYING)
+            // Validate orbit snapshot for all vessels that have one (not just FLYING)
+            // This prevents ArgumentOutOfRangeException in OrbitSnapshot.Load() when body index is invalid
+            if (protoVessel.orbitSnapShot != null)
             {
-                if (protoVessel.orbitSnapShot == null)
+                if (!ValidateOrbitBodyIndex(protoVessel.orbitSnapShot.ReferenceBodyIndex, protoVessel.vesselID, protoVessel.vesselName))
                 {
-                    LunaLog.LogWarning("[LMP]: Skipping flying vessel load - Protovessel does not have an orbit snapshot");
                     return false;
                 }
-                if (FlightGlobals.Bodies == null || FlightGlobals.Bodies.Count < protoVessel.orbitSnapShot.ReferenceBodyIndex)
-                {
-                    LunaLog.LogWarning($"[LMP]: Skipping flying vessel load - Could not find celestial body index {protoVessel.orbitSnapShot.ReferenceBodyIndex}");
-                    return false;
-                }
+            }
+            else if (protoVessel.situation == Vessel.Situations.FLYING)
+            {
+                // Flying vessels must have an orbit snapshot
+                LunaLog.LogWarning($"[LMP]: Skipping flying vessel load ({protoVessel.vesselName}) - Protovessel does not have an orbit snapshot");
+                return false;
             }
 
             //Fix the flags urls in the vessel. The flag have the value as: "Squad/Flags/default"
@@ -155,6 +157,27 @@ namespace LmpClient.Extensions
                     part.flagURL = "Squad/Flags/default";
                 }
             }
+            return true;
+        }
+
+        /// <summary>
+        /// Validates that the orbit body index is valid (exists in the current solar system)
+        /// </summary>
+        private static bool ValidateOrbitBodyIndex(int bodyIndex, Guid vesselId, string vesselName)
+        {
+            if (FlightGlobals.Bodies == null)
+            {
+                LunaLog.LogWarning($"[LMP]: Skipping vessel load ({vesselName} {vesselId}) - FlightGlobals.Bodies is null");
+                return false;
+            }
+
+            if (bodyIndex < 0 || bodyIndex >= FlightGlobals.Bodies.Count)
+            {
+                LunaLog.LogWarning($"[LMP]: Skipping vessel load ({vesselName} {vesselId}) - Invalid celestial body index {bodyIndex}. " +
+                    $"Valid range is 0-{FlightGlobals.Bodies.Count - 1}. The vessel may reference a body from an unsupported mod.");
+                return false;
+            }
+
             return true;
         }
     }
