@@ -30,7 +30,6 @@ namespace Server.System
         {
             CurrentVessels.TryRemove(vesselId, out _);
             VesselDataUpdater.CleanupCaches(vesselId);
-            VesselContext.RemoveTrackedVessel(vesselId);
 
             _ = Task.Run(() =>
             {

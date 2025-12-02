@@ -26,11 +26,16 @@ namespace Server.System.Vessel
         /// </summary>
         public static void CleanupCaches(Guid vesselId)
         {
-            Semaphore.TryRemove(vesselId, out _);
-            CleanupUpdateDictionary(vesselId);
-            CleanupResourceDictionary(vesselId);
-            CleanupPositionDictionary(vesselId);
-            CleanupFlightStateDictionary(vesselId);
+            var syncObject = Semaphore.GetOrAdd(vesselId, _ => new object());
+
+            lock (syncObject)
+            {
+                CleanupUpdateDictionary(vesselId);
+                CleanupResourceDictionary(vesselId);
+                CleanupPositionDictionary(vesselId);
+                CleanupFlightStateDictionary(vesselId);
+                Semaphore.TryRemove(vesselId, out _);
+            }
         }
 
         static partial void CleanupUpdateDictionary(Guid vesselId);
